@@ -1,3 +1,4 @@
+import os
 import copy
 import json
 import codecs
@@ -105,10 +106,11 @@ def sparqlToFunQuery(sq: str):
     return out
 
 if __name__ == '__main__':
-    for infile, outfile in [("/Users/nilesh/python/datasets/lcquad/LC-QuAD/test-data.json", "/Users/nilesh/python/datasets/lcquad/LC-QuAD/lcquad.funq.train.json"),
-                              ("/Users/nilesh/python/datasets/lcquad/LC-QuAD/train-data.json", "/Users/nilesh/python/datasets/lcquad/LC-QuAD/lcquad.funq.test.json")]:
+    dir_prefix = '/Users/nilesh/python/datasets/lcquad/LC-QuAD/'
+    for infile, outfile in [("test-data.json", "lcquad.funq.train.json"),
+                              ("train-data.json", "lcquad.funq.test.json")]:
         print(f"Parsing {infile}")
-        with codecs.open(infile) as fp:
+        with codecs.open(os.path.join(dir_prefix, infile)) as fp:
             data = json.load(fp)
             dataset = []
             for sample in tqdm(data):
@@ -117,5 +119,5 @@ if __name__ == '__main__':
                 g = sparqlToFunQuery(sq)
                 dataset.append({'question': q, 'logical_form': g})
 
-        with codecs.open(outfile, "w") as fp:
+        with codecs.open(os.path.join(dir_prefix, outfile), "w") as fp:
             json.dump(dataset, fp, indent=4, separators=(',', ': '))
