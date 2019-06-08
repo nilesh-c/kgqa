@@ -2,11 +2,11 @@ from allennlp.semparse import DomainLanguage
 from allennlp.semparse import predicate
 from typing import NamedTuple, Set
 from numbers import Number
-
+from hdt import HDTDocument
 
 class Predicate(str):
     pass
-
+''
 class Entity(str):
     pass
 
