@@ -184,7 +184,36 @@ class LCQuADLanguage(DomainLanguage):
         """
         Return intersection of two sets of entities.
         """
-        pass
+        assert isinstance(intermediate_results1, GraphPatternResultSet)
+        assert isinstance(intermediate_results2, GraphPatternResultSet)
+        popped_var1 = self.var_stack.pop()
+        popped_var2 = self.var_stack.pop()
+        popped_patterns1 = self.pattern_stack.pop().patterns
+        popped_patterns2 = self.pattern_stack.pop().patterns
+
+        # replace the higher numbered var with the lower var
+        lesser = min(popped_var1, popped_var2)
+        higher = max(popped_var1, popped_var2)
+
+        def merge(pattern):
+            replace = lambda x: lesser if x == higher else x
+            s, p, o = pattern
+            if isinstance(s, int):
+                s = replace(s)
+            if isinstance(o, int):
+                o = replace(o)
+
+            return s, p, o
+
+        popped_patterns1 = set(map(merge, popped_patterns1))
+        popped_patterns2 = set(map(merge, popped_patterns2))
+
+        gpset = GraphPatternResultSet(popped_patterns1 | popped_patterns2)
+
+        self.var_stack.append(lesser)
+        self.pattern_stack.append(gpset)
+
+        return gpset
 
     @predicate
     def get(self, entity: Entity) -> ResultSet:
