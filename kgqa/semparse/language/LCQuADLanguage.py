@@ -1,13 +1,9 @@
 import types
+from functools import wraps
 from collections import UserDict, MutableMapping, defaultdict
-
-from allennlp.semparse import DomainLanguage
-from allennlp.semparse import predicate
 from typing import Set, Union, Optional, Callable, TypeVar, Dict, List, Tuple, Any
 from numbers import Number
-
-from allennlp.semparse.domain_languages.domain_language import PredicateType
-from hdt import HDTDocument
+from allennlp.semparse.domain_languages.domain_language import DomainLanguage, predicate, PredicateType
 
 class Predicate(str):
     pass
@@ -104,12 +100,18 @@ def make_function_dicts(max_entity_id, max_predicate_id):
 
     return FuncDict(dict(), get_value_func, contains_func), FuncDict(defaultdict(list), get_type_func, contains_func)
 
+def record_call(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        results = func(self, *args, **kwargs)
+        self.call_stack.append((func, args, kwargs, results))
+    return wrapper
+
 class LCQuADLanguage(DomainLanguage):
     """
     Implements the functions in our custom variable-free functional query language for the LCQuAD dataset.
 
     """
-
     def __init__(self, max_entity_id, max_predicate_id):
         start_types = {Number, Entity, Predicate}
         functions, function_types = make_function_dicts(max_entity_id, max_predicate_id)
@@ -130,6 +132,7 @@ class LCQuADLanguage(DomainLanguage):
         self.var_counter = 0
         self.var_stack: List[int] = []
         self.pattern_stack: List[GraphPatternResultSet] = []
+        self.call_stack: List[Tuple] = []
 
     def get_new_variable(self) -> Entity:
         self.var_counter += 1
@@ -138,6 +141,7 @@ class LCQuADLanguage(DomainLanguage):
     def execute(self, logical_form: str):
         self.reset_state()
         return super().execute(logical_form)
+
 
     def execute_resultset(self, results: ResultSet) -> EntityResultSet:
         pass
@@ -148,6 +152,7 @@ class LCQuADLanguage(DomainLanguage):
             pattern = (o, Predicate(p), s)
         return pattern
 
+    @record_call
     @predicate
     def find(self, intermediate_results: ResultSet, predicate: Predicate) -> ResultSet:
         """
@@ -235,6 +240,7 @@ class LCQuADLanguage(DomainLanguage):
         Returns a count of a set of entities.
         """
         return self.execute(intermediate_results)[1]
+
 
 
 # if __name__ == '__main__':
