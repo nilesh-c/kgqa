@@ -3,7 +3,11 @@ from functools import wraps
 from collections import UserDict, MutableMapping, defaultdict
 from typing import Set, Union, Optional, Callable, TypeVar, Dict, List, Tuple, Any
 from numbers import Number
-from allennlp.semparse.domain_languages.domain_language import DomainLanguage, predicate, PredicateType
+
+try:
+    from allennlp.semparse.domain_languages.domain_language import DomainLanguage, predicate, PredicateType
+except:
+    from allennlp.semparse.domain_languages.domain_language import DomainLanguage, predicate, PredicateType
 
 class Predicate(str):
     pass
