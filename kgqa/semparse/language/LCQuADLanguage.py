@@ -105,10 +105,21 @@ def make_function_dicts(max_entity_id, max_predicate_id):
     return FuncDict(dict(), get_value_func, contains_func), FuncDict(defaultdict(list), get_type_func, contains_func)
 
 def record_call(func):
+    def parse_arg(arg):
+        if isinstance(arg, EntityResultSet):
+            return arg.entity
+        elif isinstance(arg, GraphPatternResultSet):
+            return arg.patterns
+        else:
+            return arg
+
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        results = func(self, *args, **kwargs)
-        self.call_stack.append((func, args, kwargs, results))
+        results: ResultSet = func(self, *args, **kwargs)
+        args = [parse_arg(arg) for arg in args]
+        pushed_var = self.var_stack[-1]
+        self.call_stack.append((func.__name__, pushed_var, args, parse_arg(results)))
+        return results
     return wrapper
 
 class LCQuADLanguage(DomainLanguage):
@@ -246,10 +257,9 @@ class LCQuADLanguage(DomainLanguage):
         return self.execute(intermediate_results)[1]
 
 
-
-# if __name__ == '__main__':
-#     l = LCQuADLanguage(10, 10)
-#     # print(l.logical_form_to_action_sequence("(find (find E2 P3) P4)"))
-#     # ers = l.execute("(find (get E2) (reverse P3))")
-#     ers = l.execute('(find (find (get E2), P3), P4)')
-#     # ers = l.execute('(intersection (find (get E2), P2), (find (get E1), P1))')
+if __name__ == '__main__':
+    l = LCQuADLanguage(10, 10)
+    # print(l.logical_form_to_action_sequence("(find (find E2 P3) P4)"))
+    # ers = l.execute("(find (get E2) (reverse P3))")
+    ers = l.execute('(find (find (get E2), P3), P4)')
+    # ers = l.execute('(intersection (find (get E2), P2), (find (get E1), P1))')
