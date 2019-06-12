@@ -1,13 +1,14 @@
 import types
 from functools import wraps
 from collections import UserDict, MutableMapping, defaultdict
-from typing import Set, Union, Optional, Callable, TypeVar, Dict, List, Tuple, Any
+from typing import Set, Union, Optional, Callable, TypeVar, Dict, List, Tuple, Any, Iterable
 from numbers import Number
+from kgqa.semparse.context import HdtQAContext
 
 try:
-    from allennlp.semparse.domain_languages.domain_language import DomainLanguage, predicate, PredicateType
+    from allennlp.semparse.domain_languages.domain_language import DomainLanguage, PredicateType, predicate
 except:
-    from allennlp.semparse.domain_languages.domain_language import DomainLanguage, predicate, PredicateType
+    from allennlp.semparse.domain_languages.domain_language import DomainLanguage, PredicateType, predicate
 
 class Predicate(str):
     pass
@@ -18,7 +19,7 @@ class ReversedPredicate(Predicate):
 class Entity(str):
     pass
 
-class ResultSet():
+class ResultSet:
     pass
 
 class EntityResultSet(ResultSet):
@@ -28,6 +29,20 @@ class EntityResultSet(ResultSet):
 class GraphPatternResultSet(ResultSet):
     def __init__(self, patterns: Set[Tuple[Any, Predicate, Any]]):
         self.patterns = patterns
+
+    def to_hdt_query(self) -> List[Tuple[str, str, str]]:
+        check_variable = lambda x: f"?{x}" if isinstance(x, int) else x
+        return [tuple(check_variable(i) for i in p) for p in self.patterns]
+
+
+class Count:
+    def __init__(self, result_set: GraphPatternResultSet):
+        self.result_set = result_set
+
+class Contains:
+    def __init__(self, superset: ResultSet, subset: ResultSet):
+        self.superset = superset
+        self.subset = subset
 
 _KT = TypeVar('_KT')
 _VT = TypeVar('_VT')
@@ -74,31 +89,39 @@ class FuncDict(MutableMapping):
     def __len__(self):
         return len(self.store)
 
-def make_function_dicts(max_entity_id, max_predicate_id):
+def make_function_dicts():
     entity_type = PredicateType.get_type(Entity)
     predicate_type = PredicateType.get_type(Predicate)
 
+    def is_entity(uri: str):
+        return uri.startswith("http://dbpedia.org/")
+
+    def is_predicate(uri: str):
+        return uri.startswith("http://")
+
     def get_value_func(key):
-        if key[0] == 'E':
+        if is_entity(key):
             return lambda: Entity(key)
-        elif key[0] == 'P':
+        elif is_predicate(key):
             return lambda: Predicate(key)
         else:
             return None
 
     def get_type_func(key):
-        if key[0] == 'E':
+        if is_entity(key):
             return [entity_type]
-        elif key[0] == 'P':
+        elif is_predicate(key):
             return [predicate_type]
         else:
             return None
 
     def contains_func(key):
-        if key[0] == 'E':
-            return 0 < int(key[1:]) <= max_entity_id
-        elif key[0] == 'P':
-            return 0 < int(key[1:]) <= max_predicate_id
+        if is_entity(key):
+            # return 0 < int(key[1:]) <= max_entity_id
+            return True
+        elif is_predicate(key):
+            # return 0 < int(key[1:]) <= max_predicate_id
+            return True
         else:
             return None
 
@@ -117,7 +140,7 @@ def record_call(func):
     def wrapper(self, *args, **kwargs):
         results: ResultSet = func(self, *args, **kwargs)
         args = [parse_arg(arg) for arg in args]
-        pushed_var = self.var_stack[-1]
+        pushed_var = self.var_stack[-1] if self.var_stack else None
         self.call_stack.append((func.__name__, pushed_var, args, parse_arg(results)))
         return results
     return wrapper
@@ -127,9 +150,10 @@ class LCQuADLanguage(DomainLanguage):
     Implements the functions in our custom variable-free functional query language for the LCQuAD dataset.
 
     """
-    def __init__(self, max_entity_id, max_predicate_id):
+    def __init__(self, context: HdtQAContext):
+        self.context = context
         start_types = {Number, Entity, Predicate}
-        functions, function_types = make_function_dicts(max_entity_id, max_predicate_id)
+        functions, function_types = make_function_dicts()
         self._functions: MutableMapping[str, Callable] = functions
         self._function_types: Dict[str, List[PredicateType]] = function_types
         self._start_types: Set[PredicateType] = set([PredicateType.get_type(type_) for type_ in start_types])
@@ -153,13 +177,61 @@ class LCQuADLanguage(DomainLanguage):
         self.var_counter += 1
         return self.var_counter
 
-    def execute(self, logical_form: str):
+    def query_hdt(self, result_set: GraphPatternResultSet):
+        out_var = f"?{self.var_stack.pop()}"
+        result_iter = self.context.join(result_set.to_hdt_query())
+        for join_set in result_iter:
+            for var, uri in join_set:
+                if var == out_var:
+                    yield uri
+
+    def execute(self, logical_form: str) -> Union[Iterable[str], bool, int]:
         self.reset_state()
-        return super().execute(logical_form)
+        result: GraphPatternResultSet = super().execute(logical_form)
 
+        out = None
+        if isinstance(result, GraphPatternResultSet):
+            out = self.query_hdt(result)
 
-    def execute_resultset(self, results: ResultSet) -> EntityResultSet:
-        pass
+        elif isinstance(result, Contains):
+            superset, subset = result.superset, result.subset
+
+            if isinstance(superset, EntityResultSet) and isinstance(subset, EntityResultSet):
+                out = superset.entity == subset.entity
+
+            elif isinstance(superset, GraphPatternResultSet):
+                if isinstance(subset, GraphPatternResultSet):
+                    subset = set(self.query_hdt(subset))
+
+                elif isinstance(subset, EntityResultSet):
+                    subset = {subset.entity}
+
+                superset = set(self.query_hdt(superset))
+                if not subset:
+                    if not superset:
+                        print("WARNING: both empty sets in contains(superset, subset)")
+                    else:
+                        print("WARNING: empty subset in contains(superset, subset)")
+
+                out = subset.issubset(superset)
+
+        elif isinstance(result, Count):
+            out = self.query_hdt(result.result_set)
+            out = len(list(out))
+
+        return out
+
+    def replace_var(self, replace_func):
+        def func(pattern):
+            s, p, o = pattern
+            if isinstance(s, int):
+                s = replace_func(s)
+            if isinstance(o, int):
+                o = replace_func(o)
+
+            return s, p, o
+
+        return func
 
     def reverse_check(self, pattern: Tuple[Any, Predicate, Any]) -> Tuple[Any, Predicate, Any]:
         s, p, o = pattern
@@ -198,7 +270,7 @@ class LCQuADLanguage(DomainLanguage):
 
         return gpset
 
-
+    @record_call
     @predicate
     def intersection(self, intermediate_results1: ResultSet, intermediate_results2: ResultSet) -> ResultSet:
         """
@@ -215,18 +287,12 @@ class LCQuADLanguage(DomainLanguage):
         lesser = min(popped_var1, popped_var2)
         higher = max(popped_var1, popped_var2)
 
-        def merge(pattern):
-            replace = lambda x: lesser if x == higher else x
-            s, p, o = pattern
-            if isinstance(s, int):
-                s = replace(s)
-            if isinstance(o, int):
-                o = replace(o)
+        replace = lambda x: lesser if x == higher else x
 
-            return s, p, o
+        replace_func = self.replace_var(replace)
 
-        popped_patterns1 = set(map(merge, popped_patterns1))
-        popped_patterns2 = set(map(merge, popped_patterns2))
+        popped_patterns1 = set(map(replace_func, popped_patterns1))
+        popped_patterns2 = set(map(replace_func, popped_patterns2))
 
         gpset = GraphPatternResultSet(popped_patterns1 | popped_patterns2)
 
@@ -235,6 +301,7 @@ class LCQuADLanguage(DomainLanguage):
 
         return gpset
 
+    @record_call
     @predicate
     def get(self, entity: Entity) -> ResultSet:
         """
@@ -242,6 +309,7 @@ class LCQuADLanguage(DomainLanguage):
         """
         return EntityResultSet(entity)
 
+    @record_call
     @predicate
     def reverse(self, predicate: Predicate) -> Predicate:
         """
@@ -249,17 +317,35 @@ class LCQuADLanguage(DomainLanguage):
         """
         return ReversedPredicate(predicate)
 
+    @record_call
     @predicate
-    def count(self, intermediate_results: ResultSet) -> Number:
+    def count(self, intermediate_results: ResultSet) -> Count:
         """
         Returns a count of a set of entities.
         """
-        return self.execute(intermediate_results)[1]
+        return Count(intermediate_results)
+
+    @record_call
+    @predicate
+    def contains(self, superset: ResultSet, subset: ResultSet) -> Contains:
+        """
+        Returns a boolean value indicating whether subset is "contained" inside superset
+        """
+        return Contains(superset, subset)
 
 
 if __name__ == '__main__':
-    l = LCQuADLanguage(10, 10)
+    ctx = HdtQAContext('/data/nilesh/datasets/dbpedia/hdt/dbpedia2016-04en.hdt')
+    l = LCQuADLanguage(ctx)
+    # ers = l.execute('(find (get http://dbpedia.org/resource/Barack_Obama), (reverse http://dbpedia.org/ontology/religion))')
+    # ers = l.execute('(intersection (find '
+    #                 '(find (get http://dbpedia.org/resource/Barack_Obama),(reverse http://dbpedia.org/ontology/religion)),'
+    #                 'http://dbpedia.org/ontology/religion), (find (get http://dbpedia.org/class/yago/Doctor110020890) http://www.w3.org/1999/02/22-rdf-syntax-ns#type))')
+
+    ers = l.execute("(contains (find (get http://dbpedia.org/resource/Edward_Tuckerman), (reverse http://www.w3.org/1999/02/22-rdf-syntax-ns#type)), (find (get http://dbpedia.org/resource/Barack_Obama), (reverse http://www.w3.org/1999/02/22-rdf-syntax-ns#type)))")
+    # ers = l.execute('(intersection (find (get http://dbpedia.org/resource/Protestantism), http://dbpedia.org/ontology/religion), (find (get http://dbpedia.org/resource/Transylvania_University) http://dbpedia.org/ontology/education))')
+
     # print(l.logical_form_to_action_sequence("(find (find E2 P3) P4)"))
     # ers = l.execute("(find (get E2) (reverse P3))")
-    ers = l.execute('(find (find (get E2), P3), P4)')
+    # ers = l.execute('(find (find (get E2), P3), P4)')
     # ers = l.execute('(intersection (find (get E2), P2), (find (get E1), P1))')
