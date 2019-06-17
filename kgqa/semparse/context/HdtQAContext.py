@@ -1,6 +1,6 @@
 import hdt
 from typing import Optional, Iterable, Tuple, List
-from hdt import HDTDocument
+from hdt import HDTDocument, IdentifierPosition
 
 
 class HdtQAContext:
@@ -67,3 +67,11 @@ class HdtQAContext:
         for s, p, o in self.triples(subject=subject)[0]:
             yield p, o
 
+    def verify_uri(self, uri: str, position: IdentifierPosition) -> Optional[str]:
+        uri = uri.replace("'", "")
+        sub_id = self.graph.convert_term(uri, position)
+        if not sub_id:
+            uri = ascii(uri.encode())[2:-1].replace("\\x", "x")
+            sub_id = self.graph.convert_term(uri, position)
+
+        return uri if sub_id else None
