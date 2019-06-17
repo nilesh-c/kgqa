@@ -4,8 +4,11 @@ from hdt import HDTDocument
 
 
 class HdtQAContext:
-    def __init__(self, hdt_path: str):
-        self.graph = HDTDocument(hdt_path)
+    def __init__(self, hdt_path: Optional[str] = None, graph: Optional[HDTDocument] = None):
+        if graph:
+            self.graph = graph
+        else:
+            self.graph = HDTDocument(hdt_path, map=False, progress=True)
 
     def triples(self, subject: Optional[str]='', predicate: Optional[str]='', object: Optional[str]='')\
             -> Tuple[hdt.JoinIterator, int]:
