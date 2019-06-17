@@ -3,7 +3,6 @@ from functools import wraps
 from collections import UserDict, MutableMapping, defaultdict
 from typing import Set, Union, Optional, Callable, TypeVar, Dict, List, Tuple, Any, Iterable
 from numbers import Number
-from rdflib import
 
 from hdt import IdentifierPosition
 
@@ -356,3 +355,42 @@ if __name__ == '__main__':
     # ers = l.execute("(find (get E2) (reverse P3))")
     # ers = l.execute('(find (find (get E2), P3), P4)')
     # ers = l.execute('(intersection (find (get E2), P2), (find (get E1), P1))')
+
+    import codecs, json
+    from tqdm import tqdm
+    import traceback
+    import time
+
+    start_time = time.time()
+
+    result_count = 0
+    template = "/data/nilesh/datasets/LC-QuAD/lcquad.annotated.funq.{}.json"
+    for split in ['train']:
+        newdataset = []
+        with codecs.open(template.format(split)) as fp:
+            data = json.load(fp)
+            for doc in tqdm(data):
+                # try:
+                query_time = time.time()
+                results = l.execute(doc['logical_form'])
+                if results:
+                    if isinstance(results, bool) or isinstance(results, int):
+                        results = [results]
+                    else:
+                        results = list(results)
+                else:
+                    results = []
+                query_time = time.time() - query_time
+                result_count += len(results)
+                doc['results'] = results
+                doc['time'] = query_time
+                newdataset.append(doc)
+                # except Exception as err:
+                #     print("ERROR")
+                #     traceback.print_tb(err.__traceback__)
+                #     print("\n\n", doc['logical_form'])
+
+        print("--- %s seconds ---" % (time.time() - start_time))
+
+        with codecs.open(template.format(f"{split}.results"), "w") as fp:
+            json.dump(newdataset, fp, indent=4, separators=(',', ': '), sort_keys=True)
