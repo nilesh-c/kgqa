@@ -12,9 +12,12 @@ from rdflib import Graph
 from rdflib.plugins.sparql.parser import parseQuery
 from rdflib.term import *
 
+magic_replace = [(",", "MAGIC_COMMA"),
+                 ("(", "MAGIC_LEFT_PARENTHESIS"),
+                 (")", "MAGIC_RIGHT_PARENTHESIS")]
 
 class LCQuADSparqlToFunQuery:
-    def __init__(self, entity_to_id: Dict[str, int], predicate_to_id: Dict[str, int], lisp_style=True):
+    def __init__(self, entity_to_id: Dict[str, int] = {}, predicate_to_id: Dict[str, int] = {}, lisp_style=True):
         """
         Converts a small subset of SPARQL to our custom functional query language.
         There's some ugly and hardcoded stuff in the parsing logic.
@@ -29,9 +32,18 @@ class LCQuADSparqlToFunQuery:
         self.lisp_style = lisp_style
 
     def map_to_id(self, s, p, o):
-        return self.entity_to_id.get(str(s), s),\
-               self.predicate_to_id.get(str(p), p),\
-               self.entity_to_id.get(str(o), o)
+        def magic(uri):
+            if not isinstance(uri, Variable):
+                for token, replace in magic_replace:
+                    uri = uri.replace(token, replace)
+            return uri
+        s = magic(s)
+        o = magic(o)
+        return s, p, o
+        # return s.replace(",", "MAGIC_COMMA"), p, o.replace(",", "MAGIC_COMMA")
+        # return self.entity_to_id.get(str(s), s),\
+        #        self.predicate_to_id.get(str(p), p),\
+        #        self.entity_to_id.get(str(o), o)
 
     def toFQL(self, sq):
         """
@@ -56,9 +68,9 @@ class LCQuADSparqlToFunQuery:
             # LC-QuAD has simple triple-based ASK queries; trivial to compute the output
             triple = triples[0]
             if self.lisp_style:
-                out = "(in {} (find {} {}))".format(*self.map_to_id(triple[0], triple[2], triple[1]))
+                out = "(contains (find (get {}), {}), (get {}))".format(*self.map_to_id(triple[2], triple[1], triple[0]))
             else:
-                out = "in(<{}>, find(<{}>, <{}>))".format(*self.map_to_id(triple[0], triple[2], triple[1]))
+                out = "contains(find(<{}>, <{}>), <{}>)".format(*self.map_to_id(triple[2], triple[1], triple[0]))
         else:
             try:
                 # If it's not a COUNT query, then it's a SELECT
@@ -84,12 +96,12 @@ class LCQuADSparqlToFunQuery:
                     s, p, o = self.map_to_id(s, p, o)
                     if s == Variable('x'):
                         if self.lisp_style:
-                            x_finds.append("(find {} {})".format(o, p))
+                            x_finds.append("(find (get {}), {})".format(o, p))
                         else:
                             x_finds.append("find(<{}>, <{}>)".format(o, p))
                     if o == Variable('x'):
                         if self.lisp_style:
-                            x_finds.append("(find {} (reverse {}))".format(s, p))
+                            x_finds.append("(find (get {}), (reverse {}))".format(s, p))
                         else:
                             x_finds.append("find(<{}>, reverse(<{}>))".format(s, p))
 
@@ -100,7 +112,7 @@ class LCQuADSparqlToFunQuery:
                     x_finds = x_finds[0]
                 else:
                     if self.lisp_style:
-                        x_finds = reduce(lambda a, b: "(intersection {} {})".format(a, b), x_finds)
+                        x_finds = reduce(lambda a, b: "(intersection {}, {})".format(a, b), x_finds)
                     else:
                         x_finds = reduce(lambda a, b: "intersection({}, {})".format(a, b), x_finds)
 
@@ -116,15 +128,15 @@ class LCQuADSparqlToFunQuery:
                     if Variable('x') not in [s, o]:
                         # If no ?x references in subject or object, we have a simple find() retrieval output
                         if s == Variable(select):
-                            select_finds.append("(find {} {})".format(o, p))
+                            select_finds.append("(find (get {}), {})".format(o, p))
                         if o == Variable(select):
-                            select_finds.append("(find {} (reverse {}))".format(s, p))
+                            select_finds.append("(find (get {}), (reverse {}))".format(s, p))
                     else:
                         # If we have a blank node ?x, paste x_finds in its place
                         if s == Variable('x'):
-                            select_finds.append("(find {} (reverse {}))".format(x_finds, p))
+                            select_finds.append("(find {}, (reverse {}))".format(x_finds, p))
                         if o == Variable('x'):
-                            select_finds.append("(find {} {})".format(x_finds, p))
+                            select_finds.append("(find {}, {})".format(x_finds, p))
                 else:
                     if Variable('x') not in [s, o]:
                         # If no ?x references in subject or object, we have a simple find() retrieval output
@@ -144,9 +156,9 @@ class LCQuADSparqlToFunQuery:
                 select_finds = select_finds[0]
             else:
                 if self.lisp_style:
-                    select_finds = reduce(lambda a, b: "(intersection {} {})".format(a, b), select_finds)
+                    select_finds = reduce(lambda a, b: "(intersection {}, {})".format(a, b), select_finds)
                 else:
-                    select_finds = reduce(lambda a, b: "and({}, {})".format(a, b), select_finds)
+                    select_finds = reduce(lambda a, b: "intersection({}, {})".format(a, b), select_finds)
 
             # If it's a COUNT query, just call a count() in the funq
             if countquery:
@@ -185,7 +197,7 @@ def generateFromAnnotatedLCQuAD(infile: str, converter: LCQuADSparqlToFunQuery):
 
             for entity in doc['entity mapping']:
                 mention = entity['label']
-                uri = converter.entity_to_id[entity['uri']]
+                uri = entity['uri']
 
                 start = q.find(mention)
                 end = start + len(mention)
@@ -213,22 +225,22 @@ def generateFromAnnotatedLCQuAD(infile: str, converter: LCQuADSparqlToFunQuery):
 if __name__ == '__main__':
     dir_prefix = '/data/nilesh/datasets/LC-QuAD/'
 
-    print("Loading DBpedia ID indexes")
-    with codecs.open("/data/nilesh/datasets/dbpedia/triples.index.pickle.new", "rb") as f:
-        (entity_to_id, predicate_to_id) = pickle.load(f)
-
-    for key, value in entity_to_id.items():
-        entity_to_id[key] = f"E{value}"
-
-    for key, value in predicate_to_id.items():
-        predicate_to_id[key] = f"P{value}"
+    # print("Loading DBpedia ID indexes")
+    # with codecs.open("/data/nilesh/datasets/dbpedia/triples.index.pickle.new", "rb") as f:
+    #     (entity_to_id, predicate_to_id) = pickle.load(f)
+    #
+    # for key, value in entity_to_id.items():
+    #     entity_to_id[key] = f"E{value}"
+    #
+    # for key, value in predicate_to_id.items():
+    #     predicate_to_id[key] = f"P{value}"
 
     for lisp_style in [True, False]:
         for infile, outfile in [("annotated-test-data.json", "lcquad.annotated.{}.test.json"),
                                 ("annotated-train-data.json", "lcquad.annotated.{}.train.json")]:
             outfile = outfile.format('lisp' if lisp_style else 'funq')
 
-            converter = LCQuADSparqlToFunQuery(entity_to_id, predicate_to_id, lisp_style)
+            converter = LCQuADSparqlToFunQuery(lisp_style)
 
             dataset = generateFromAnnotatedLCQuAD(os.path.join(dir_prefix, infile), converter)
 
