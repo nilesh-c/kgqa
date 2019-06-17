@@ -3,6 +3,10 @@ from functools import wraps
 from collections import UserDict, MutableMapping, defaultdict
 from typing import Set, Union, Optional, Callable, TypeVar, Dict, List, Tuple, Any, Iterable
 from numbers import Number
+from rdflib import
+
+from hdt import IdentifierPosition
+
 from kgqa.semparse.context import HdtQAContext
 
 try:
@@ -30,17 +34,12 @@ class GraphPatternResultSet(ResultSet):
     def __init__(self, patterns: Set[Tuple[Any, Predicate, Any]]):
         self.patterns = patterns
 
-    def to_hdt_query(self) -> List[Tuple[str, str, str]]:
-        check_variable = lambda x: f"?{x}" if isinstance(x, int) else x
-        return [tuple(check_variable(i) for i in p) for p in self.patterns]
-
-
 class Count:
     def __init__(self, result_set: GraphPatternResultSet):
         self.result_set = result_set
 
 class Contains:
-    def __init__(self, superset: ResultSet, subset: ResultSet):
+    def __init__(self, subset: ResultSet, superset: ResultSet):
         self.superset = superset
         self.subset = subset
 
@@ -97,7 +96,7 @@ def make_function_dicts():
         return uri.startswith("http://dbpedia.org/")
 
     def is_predicate(uri: str):
-        return uri.startswith("http://")
+        return uri.startswith("htt")
 
     def get_value_func(key):
         if is_entity(key):
@@ -151,6 +150,9 @@ class LCQuADLanguage(DomainLanguage):
 
     """
     def __init__(self, context: HdtQAContext):
+        self.magic_replace = [(",", "MAGIC_COMMA"),
+                 ("(", "MAGIC_LEFT_PARENTHESIS"),
+                 (")", "MAGIC_RIGHT_PARENTHESIS")]
         self.context = context
         start_types = {Number, Entity, Predicate}
         functions, function_types = make_function_dicts()
@@ -178,12 +180,14 @@ class LCQuADLanguage(DomainLanguage):
         return self.var_counter
 
     def query_hdt(self, result_set: GraphPatternResultSet):
+        fix_sub = lambda x: f"?{x}" if isinstance(x, int) else self.context.verify_uri(x, IdentifierPosition.Subject)
+        fix_obj = lambda x: f"?{x}" if isinstance(x, int) else self.context.verify_uri(x, IdentifierPosition.Object)
+
+        query = [(fix_sub(p[0]), p[1], fix_obj(p[2])) for p in result_set.patterns]
+
         out_var = f"?{self.var_stack.pop()}"
-        result_iter = self.context.join(result_set.to_hdt_query())
-        for join_set in result_iter:
-            for var, uri in join_set:
-                if var == out_var:
-                    yield uri
+        result_iter = self.context.join(query)
+        return set([uri for join_set in result_iter for var, uri in join_set if var == out_var])
 
     def execute(self, logical_form: str) -> Union[Iterable[str], bool, int]:
         self.reset_state()
@@ -197,14 +201,15 @@ class LCQuADLanguage(DomainLanguage):
             superset, subset = result.superset, result.subset
 
             if isinstance(superset, EntityResultSet) and isinstance(subset, EntityResultSet):
-                out = superset.entity == subset.entity
+                superset = {str(superset.entity)}
+                subset = {str(subset.entity)}
 
             elif isinstance(superset, GraphPatternResultSet):
                 if isinstance(subset, GraphPatternResultSet):
                     subset = set(self.query_hdt(subset))
 
                 elif isinstance(subset, EntityResultSet):
-                    subset = {subset.entity}
+                    subset = {str(subset.entity)}
 
                 superset = set(self.query_hdt(superset))
                 if not subset:
@@ -213,11 +218,11 @@ class LCQuADLanguage(DomainLanguage):
                     else:
                         print("WARNING: empty subset in contains(superset, subset)")
 
-                out = subset.issubset(superset)
+            out = subset.issubset(superset)
 
         elif isinstance(result, Count):
             out = self.query_hdt(result.result_set)
-            out = len(list(out))
+            out = len(out)
 
         return out
 
@@ -307,6 +312,8 @@ class LCQuADLanguage(DomainLanguage):
         """
         Get entity and wrap it in a set.
         """
+        for original, replace in self.magic_replace:
+            entity = entity.replace(replace, original)
         return EntityResultSet(entity)
 
     @record_call
@@ -331,7 +338,7 @@ class LCQuADLanguage(DomainLanguage):
         """
         Returns a boolean value indicating whether subset is "contained" inside superset
         """
-        return Contains(superset, subset)
+        return Contains(subset, superset)
 
 
 if __name__ == '__main__':
@@ -342,7 +349,7 @@ if __name__ == '__main__':
     #                 '(find (get http://dbpedia.org/resource/Barack_Obama),(reverse http://dbpedia.org/ontology/religion)),'
     #                 'http://dbpedia.org/ontology/religion), (find (get http://dbpedia.org/class/yago/Doctor110020890) http://www.w3.org/1999/02/22-rdf-syntax-ns#type))')
 
-    ers = l.execute("(contains (find (get http://dbpedia.org/resource/Edward_Tuckerman), (reverse http://www.w3.org/1999/02/22-rdf-syntax-ns#type)), (find (get http://dbpedia.org/resource/Barack_Obama), (reverse http://www.w3.org/1999/02/22-rdf-syntax-ns#type)))")
+    # ers = l.execute("(contains (find (get http://dbpedia.org/resource/Edward_Tuckerman), (reverse http://www.w3.org/1999/02/22-rdf-syntax-ns#type)), (find (get http://dbpedia.org/resource/Barack_Obama), (reverse http://www.w3.org/1999/02/22-rdf-syntax-ns#type)))")
     # ers = l.execute('(intersection (find (get http://dbpedia.org/resource/Protestantism), http://dbpedia.org/ontology/religion), (find (get http://dbpedia.org/resource/Transylvania_University) http://dbpedia.org/ontology/education))')
 
     # print(l.logical_form_to_action_sequence("(find (find E2 P3) P4)"))
