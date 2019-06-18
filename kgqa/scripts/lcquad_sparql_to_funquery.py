@@ -220,20 +220,21 @@ def generateFromAnnotatedLCQuAD(infile: str, converter: LCQuADSparqlToFunQuery):
 
                 if matches:
                     for match in matches:
-                        mappings.append((match, entity))
+                        mappings.append((match, entity, error))
 
             contains = lambda x, y: x[0] <= y[0] and x[1] >= y[1]
 
             mappings = sorted(mappings, key=lambda x: -(x[0][1] - x[0][0]))
             pruned_mappings = []
-            for match, entity in mappings:
-                if not any([contains(pruned, match) for pruned, _ in pruned_mappings]):
-                    pruned_mappings.append((match, entity))
+            for match, entity, error in mappings:
+                if not any([contains(pruned, match) for pruned, _, _ in pruned_mappings]):
+                    pruned_mappings.append((match, entity, error))
 
             if pruned_mappings:
                 placeholders = dict()
                 placeholder_count = 1
-                for match, entity in pruned_mappings:
+                q_entity_replaced = q
+                for match, entity, error in pruned_mappings:
                     uri = entity['uri']
                     if uri in placeholders:
                         placeholder = placeholders[uri]
@@ -243,7 +244,7 @@ def generateFromAnnotatedLCQuAD(infile: str, converter: LCQuADSparqlToFunQuery):
                         placeholders[uri] = placeholder
 
                     start, end = match
-                    q_entity_replaced = q[:start] + placeholder + q[end:]
+                    q_entity_replaced = q_entity_replaced[:start] + placeholder + q_entity_replaced[end:]
 
                     if uri in entities:
                         entity = entities[uri]
@@ -251,7 +252,8 @@ def generateFromAnnotatedLCQuAD(infile: str, converter: LCQuADSparqlToFunQuery):
                     else:
                         entities[uri] = {'uri': uri,
                                          'locations': [match],
-                                         'placeholder': placeholder}
+                                         'placeholder': placeholder,
+                                         'errors': error}
 
             sq = doc['sparql_query'].replace("COUNT(?uri)", "(COUNT(?uri) as ?uri)")
             g = converter.toFQL(sq)
