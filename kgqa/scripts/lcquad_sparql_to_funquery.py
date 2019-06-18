@@ -3,7 +3,7 @@ import copy
 import json
 import codecs
 import rdflib
-import pickle
+import regex as re
 
 from functools import reduce
 from typing import *
@@ -183,8 +183,16 @@ def generateFromOriginalLCQuAD(infile: str, converter: LCQuADSparqlToFunQuery):
             dataset.append({'question': q, 'logical_form': g})
     return dataset
 
+def fuzzy_substrings(pattern, string, error, ignorecase=True):
+    matches = re.finditer(f"({re.escape(pattern)}){{e<={error}}}", string, re.IGNORECASE if ignorecase else 0)
+    if matches:
+        return [match.span() for match in matches]
+    else:
+        return None
+
 def generateFromAnnotatedLCQuAD(infile: str, converter: LCQuADSparqlToFunQuery):
     print(f"Parsing {infile}")
+
     with codecs.open(infile) as fp:
         data = json.load(fp)
         dataset = []
@@ -192,26 +200,58 @@ def generateFromAnnotatedLCQuAD(infile: str, converter: LCQuADSparqlToFunQuery):
             q: str = doc['question']
 
             q_entity_replaced: str = q
-            entities = []
-            placeholder_count = 1
+            entities = dict()
+            mappings = []
 
             for entity in doc['entity mapping']:
                 mention = entity['label']
                 uri = entity['uri']
 
-                start = q.find(mention)
-                end = start + len(mention)
-                location = (start, end)
+                label = uri.split("/")[-1]
+                label = label.split(",")[0]
 
-                placeholder = f"ENT_{placeholder_count}"
-                placeholder_count += 1
+                for error in range(13):
+                    if mention:
+                        matches = fuzzy_substrings(mention, q, error, ignorecase=False)
+                    if not matches:
+                        matches = fuzzy_substrings(label, q, error)
+                    if matches:
+                        break
 
-                q_entity_replaced = q[:start] + placeholder + q[end:]
+                if matches:
+                    for match in matches:
+                        mappings.append((match, entity))
 
-                entities.append({'mention': mention,
-                                 'uri': uri,
-                                 'location': location,
-                                 'placeholder': placeholder})
+            contains = lambda x, y: x[0] <= y[0] and x[1] >= y[1]
+
+            mappings = sorted(mappings, key=lambda x: -(x[0][1] - x[0][0]))
+            pruned_mappings = []
+            for match, entity in mappings:
+                if not any([contains(pruned, match) for pruned, _ in pruned_mappings]):
+                    pruned_mappings.append((match, entity))
+
+            if pruned_mappings:
+                placeholders = dict()
+                placeholder_count = 1
+                for match, entity in pruned_mappings:
+                    uri = entity['uri']
+                    if uri in placeholders:
+                        placeholder = placeholders[uri]
+                    else:
+                        placeholder = f"ENT_{placeholder_count}"
+                        placeholder_count += 1
+                        placeholders[uri] = placeholder
+
+                    start, end = match
+                    q_entity_replaced = q[:start] + placeholder + q[end:]
+
+                    if uri in entities:
+                        entity = entities[uri]
+                        entity['locations'].append(match)
+                    else:
+                        entities[uri] = {'uri': uri,
+                                         'locations': [match],
+                                         'placeholder': placeholder}
 
             sq = doc['sparql_query'].replace("COUNT(?uri)", "(COUNT(?uri) as ?uri)")
             g = converter.toFQL(sq)
@@ -219,7 +259,7 @@ def generateFromAnnotatedLCQuAD(infile: str, converter: LCQuADSparqlToFunQuery):
             dataset.append({'question': q,
                             'question_mapped': q_entity_replaced,
                             'logical_form': g,
-                            'entities': entities})
+                            'entities': list(entities.values())})
     return dataset
 
 if __name__ == '__main__':
