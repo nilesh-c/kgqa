@@ -185,8 +185,7 @@ class LCQuADLanguage(DomainLanguage):
         query = [(fix_sub(p[0]), p[1], fix_obj(p[2])) for p in result_set.patterns]
 
         out_var = f"?{self.var_stack.pop()}"
-        result_iter = self.context.join(query)
-        return set([uri for join_set in result_iter for var, uri in join_set if var == out_var])
+        return set(self.context.join(query, out_var))
 
     def execute(self, logical_form: str) -> Union[Iterable[str], bool, int]:
         self.reset_state()
@@ -205,12 +204,12 @@ class LCQuADLanguage(DomainLanguage):
 
             elif isinstance(superset, GraphPatternResultSet):
                 if isinstance(subset, GraphPatternResultSet):
-                    subset = set(self.query_hdt(subset))
+                    subset = self.query_hdt(subset)
 
                 elif isinstance(subset, EntityResultSet):
                     subset = {str(subset.entity)}
 
-                superset = set(self.query_hdt(superset))
+                superset = self.query_hdt(superset)
                 if not subset:
                     if not superset:
                         print("WARNING: both empty sets in contains(superset, subset)")
