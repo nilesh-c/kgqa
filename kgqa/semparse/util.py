@@ -5,7 +5,7 @@ from typing import TypeVar, MutableMapping, Optional, Callable
 
 from allennlp.semparse.domain_languages.domain_language import PredicateType
 
-from kgqa.semparse.language.LCQuADLanguage import Entity, Predicate, EntityResultSet, GraphPatternResultSet, ResultSet
+from kgqa.semparse.language.lcquad_language import Entity, Predicate, EntityResultSet, GraphPatternResultSet, ResultSet
 
 _KT = TypeVar('_KT')
 _VT = TypeVar('_VT')

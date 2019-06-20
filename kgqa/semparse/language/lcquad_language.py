@@ -4,6 +4,7 @@ from hdt import IdentifierPosition, HDTDocument
 
 from kgqa.semparse.context import HdtExecutor
 from kgqa.semparse.context.lcquad_context import LCQuADContext
+from kgqa.semparse.executor.executor import Executor
 from kgqa.semparse.util import record_call
 
 try:
@@ -51,7 +52,7 @@ class LCQuADLanguage(DomainLanguage):
                  ("(", "MAGIC_LEFT_PARENTHESIS"),
                  (")", "MAGIC_RIGHT_PARENTHESIS")]
         self.context = context
-        self.executor = context.executor
+        self.executor: Executor = context.executor
         super().__init__(start_types={Entity})
 
         for predicate in context.question_predicates:
@@ -59,6 +60,10 @@ class LCQuADLanguage(DomainLanguage):
 
         for entity in context.question_entities:
             self.add_constant(entity, Entity(entity), type_=Entity)
+
+        self.var_counter = 0
+        self.var_stack: List[int] = []
+        self.pattern_stack: List[GraphPatternResultSet] = []
 
     def reset_state(self):
         self.var_counter = 0
@@ -75,7 +80,7 @@ class LCQuADLanguage(DomainLanguage):
 
         query = [(fix_sub(p[0]), p[1], fix_obj(p[2])) for p in result_set.patterns]
 
-        out_var = f"?{self.var_stack.pop()}"
+        out_var = self.var_stack.pop()
         return set(self.executor.join(query, out_var))
 
     def execute(self, logical_form: str) -> Union[Iterable[str], bool, int]:

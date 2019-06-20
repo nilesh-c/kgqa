@@ -1,1 +1,1 @@
-from .LCQuADLanguage import LCQuADLanguage
+from .lcquad_language import LCQuADLanguage
