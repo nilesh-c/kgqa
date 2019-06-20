@@ -8,16 +8,20 @@ from kgqa.semparse.util import cached
 
 
 class HdtExecutor(Executor):
-    def __init__(self, hdt_path: Optional[str] = None, graph: Optional[HDTDocument] = None, redis_client: Optional[redis.Redis] = None):
-        self.redis = redis_client
+    def __init__(self, hdt_path: Optional[str] = None,
+                 graph: Optional[HDTDocument] = None,
+                 redis_client: Optional[redis.Redis] = None):
+        self.cache = redis_client
         if graph:
             self.graph = graph
         else:
             self.graph = HDTDocument(hdt_path, map=False, progress=True)
 
     @cached
-    def triples(self, subject: Optional[str]='', predicate: Optional[str]='', object: Optional[str]='')\
-            -> Tuple[hdt.JoinIterator, int]:
+    def triples(self, subject: Optional[str]='',
+                predicate: Optional[str]='',
+                object: Optional[str]='')\
+            -> Iterable:
         """
         Generator over the triple store
         Returns triples that match the given triple pattern and the count.
@@ -26,7 +30,8 @@ class HdtExecutor(Executor):
         return list(result_iter), count
 
     @cached
-    def join(self, patterns: List[Tuple[str, str, str]], outvar: Optional[str] = None) -> Iterable:
+    def join(self, patterns: List[Tuple[str, str, str]],
+             outvar: Optional[str] = None) -> Iterable:
         """
         Joins a list of basic graph patterns and
         returns triples that match multiple triple patterns.
