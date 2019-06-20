@@ -40,7 +40,7 @@ def cached(func):
     return wrapper
 
 
-class HdtQAContext:
+class HdtExecutor:
     def __init__(self, hdt_path: Optional[str] = None, graph: Optional[HDTDocument] = None, redis_client: Optional[redis.Redis] = None):
         self.redis = redis_client
         if graph:
