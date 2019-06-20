@@ -1,3 +1,4 @@
+import json
 from collections import defaultdict
 from functools import wraps
 from typing import TypeVar, MutableMapping, Optional, Callable
@@ -108,4 +109,38 @@ def record_call(func):
         pushed_var = self.var_stack[-1] if self.var_stack else None
         self.call_stack.append((func.__name__, pushed_var, args, parse_arg(results)))
         return results
+    return wrapper
+
+def cached(func):
+    """
+    Decorator that caches the results of a method call.
+    Set self.cache to a redis.Redis instance.
+
+    Assumptions:
+    1. Arguments and result of the function can be seralized as JSON,
+    2. self.cache has .get() and .set() methods
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if self.cache:
+            # Generate the cache key from the function's arguments.
+            key_parts = func.__name__ + json.dumps(list(args))
+            key = '-'.join(key_parts)
+            result = self.cache.get(key)
+
+            if result is None:
+                # Run the function and cache the result for next time.
+                value = func(self, *args, **kwargs)
+                value_json = json.dumps(value)
+                self.cache.set(key, value_json)
+            else:
+                # Skip the function entirely and use the cached value instead.
+                value_json = result.decode('utf-8')
+                value = json.loads(value_json)
+        else:
+            value = func(self, *args, **kwargs)
+
+        return value
+
     return wrapper
