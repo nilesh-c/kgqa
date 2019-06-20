@@ -65,16 +65,16 @@ class LCQuADLanguage(DomainLanguage):
         self.var_stack: List[int] = []
         self.pattern_stack: List[GraphPatternResultSet] = []
 
-    def reset_state(self):
+    def _reset_state(self):
         self.var_counter = 0
         self.var_stack: List[int] = []
         self.pattern_stack: List[GraphPatternResultSet] = []
 
-    def get_new_variable(self) -> int:
+    def _get_new_variable(self) -> int:
         self.var_counter += 1
         return self.var_counter
 
-    def query_hdt(self, result_set: GraphPatternResultSet):
+    def _call_executor(self, result_set: GraphPatternResultSet):
         out_var = self.var_stack.pop()
         fix_sub = lambda x: f"?{x}" if isinstance(x, int) else x
         fix_obj = lambda x: f"?{x}" if isinstance(x, int) else x
@@ -83,44 +83,9 @@ class LCQuADLanguage(DomainLanguage):
 
         return set(self.executor.join(list(query), out_var))
 
-    def execute(self, logical_form: str) -> Union[Iterable[str], bool, int]:
-        self.reset_state()
-        result: GraphPatternResultSet = super().execute(logical_form)
 
-        out = None
-        if isinstance(result, GraphPatternResultSet):
-            out = self.query_hdt(result)
-
-        elif isinstance(result, Contains):
-            superset, subset = result.superset, result.subset
-
-            if isinstance(superset, EntityResultSet) and isinstance(subset, EntityResultSet):
-                superset = {str(superset.entity)}
-                subset = {str(subset.entity)}
-
-            elif isinstance(superset, GraphPatternResultSet):
-                if isinstance(subset, GraphPatternResultSet):
-                    subset = self.query_hdt(subset)
-
-                elif isinstance(subset, EntityResultSet):
-                    subset = {str(subset.entity)}
-
-                superset = self.query_hdt(superset)
-                if not subset:
-                    if not superset:
-                        print("WARNING: both empty sets in contains(superset, subset)")
-                    else:
-                        print("WARNING: empty subset in contains(superset, subset)")
-
-            out = subset.issubset(superset)
-
-        elif isinstance(result, Count):
-            out = self.query_hdt(result.result_set)
-            out = len(out)
-
-        return out
-
-    def replace_var(self, replace_func):
+    @staticmethod
+    def _replace_var(replace_func):
         def func(pattern):
             s, p, o = pattern
             if isinstance(s, int):
@@ -132,13 +97,50 @@ class LCQuADLanguage(DomainLanguage):
 
         return func
 
-    def reverse_check(self, pattern: Tuple[Any, Predicate, Any]) -> Tuple[Any, Predicate, Any]:
+    @staticmethod
+    def _reverse_check(pattern: Tuple[Any, Predicate, Any]) -> Tuple[Any, Predicate, Any]:
         s, p, o = pattern
         if isinstance(p, ReversedPredicate):
             pattern = (o, Predicate(p), s)
         return pattern
 
-    @record_call
+    def execute(self, logical_form: str) -> Union[Iterable[str], bool, int]:
+        self._reset_state()
+        result: GraphPatternResultSet = super().execute(logical_form)
+
+        out = None
+        if isinstance(result, GraphPatternResultSet):
+            out = self._call_executor(result)
+
+        elif isinstance(result, Contains):
+            superset, subset = result.superset, result.subset
+
+            if isinstance(superset, EntityResultSet) and isinstance(subset, EntityResultSet):
+                superset = {str(superset.entity)}
+                subset = {str(subset.entity)}
+
+            elif isinstance(superset, GraphPatternResultSet):
+                if isinstance(subset, GraphPatternResultSet):
+                    subset = self._call_executor(subset)
+
+                elif isinstance(subset, EntityResultSet):
+                    subset = {str(subset.entity)}
+
+                superset = self._call_executor(superset)
+                if not subset:
+                    if not superset:
+                        print("WARNING: both empty sets in contains(superset, subset)")
+                    else:
+                        print("WARNING: empty subset in contains(superset, subset)")
+
+            out = subset.issubset(superset)
+
+        elif isinstance(result, Count):
+            out = self._call_executor(result.result_set)
+            out = len(out)
+
+        return out
+
     @predicate
     def find(self, intermediate_results: ResultSet, predicate: Predicate) -> ResultSet:
         """
@@ -149,9 +151,9 @@ class LCQuADLanguage(DomainLanguage):
         if isinstance(intermediate_results, EntityResultSet):
             object_entity = intermediate_results.entity
 
-            new_var = self.get_new_variable()
+            new_var = self._get_new_variable()
             new_pattern = (new_var, predicate, object_entity)
-            gpset = GraphPatternResultSet({self.reverse_check(new_pattern)})
+            gpset = GraphPatternResultSet({self._reverse_check(new_pattern)})
 
             self.var_stack.append(new_var)
             self.pattern_stack.append(gpset)
@@ -160,16 +162,15 @@ class LCQuADLanguage(DomainLanguage):
             popped_var = self.var_stack.pop()
             popped_patterns = self.pattern_stack.pop().patterns
 
-            new_var = self.get_new_variable()
+            new_var = self._get_new_variable()
             new_pattern = (new_var, predicate, popped_var)
-            gpset = GraphPatternResultSet(popped_patterns | {self.reverse_check(new_pattern)})
+            gpset = GraphPatternResultSet(popped_patterns | {self._reverse_check(new_pattern)})
 
             self.var_stack.append(new_var)
             self.pattern_stack.append(gpset)
 
         return gpset
 
-    @record_call
     @predicate
     def intersection(self, intermediate_results1: ResultSet, intermediate_results2: ResultSet) -> ResultSet:
         """
@@ -188,7 +189,7 @@ class LCQuADLanguage(DomainLanguage):
 
         replace = lambda x: lesser if x == higher else x
 
-        replace_func = self.replace_var(replace)
+        replace_func = self._replace_var(replace)
 
         popped_patterns1 = set(map(replace_func, popped_patterns1))
         popped_patterns2 = set(map(replace_func, popped_patterns2))
@@ -200,7 +201,6 @@ class LCQuADLanguage(DomainLanguage):
 
         return gpset
 
-    @record_call
     @predicate
     def get(self, entity: Entity) -> ResultSet:
         """
@@ -210,7 +210,6 @@ class LCQuADLanguage(DomainLanguage):
             entity = entity.replace(replace, original)
         return EntityResultSet(entity)
 
-    @record_call
     @predicate
     def reverse(self, predicate: Predicate) -> Predicate:
         """
@@ -218,7 +217,6 @@ class LCQuADLanguage(DomainLanguage):
         """
         return ReversedPredicate(predicate)
 
-    @record_call
     @predicate
     def count(self, intermediate_results: ResultSet) -> Count:
         """
@@ -226,7 +224,6 @@ class LCQuADLanguage(DomainLanguage):
         """
         return Count(intermediate_results)
 
-    @record_call
     @predicate
     def contains(self, superset: ResultSet, subset: ResultSet) -> Contains:
         """
