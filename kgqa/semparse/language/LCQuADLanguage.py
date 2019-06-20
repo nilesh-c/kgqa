@@ -1,12 +1,10 @@
-import types
-from functools import wraps
-from collections import UserDict, MutableMapping, defaultdict
-from typing import Set, Union, Optional, Callable, TypeVar, Dict, List, Tuple, Any, Iterable
-from numbers import Number
+from typing import Set, Union, List, Tuple, Any, Iterable
 
-from hdt import IdentifierPosition
+from hdt import IdentifierPosition, HDTDocument
 
-from kgqa.semparse.context import HdtQAContext
+from kgqa.semparse.context import HdtExecutor
+from kgqa.semparse.context.lcquad_context import LCQuADContext
+from kgqa.semparse.util import record_call
 
 try:
     from allennlp.semparse.domain_languages.domain_language import DomainLanguage, PredicateType, predicate
@@ -42,150 +40,43 @@ class Contains:
         self.superset = superset
         self.subset = subset
 
-_KT = TypeVar('_KT')
-_VT = TypeVar('_VT')
-
-class FuncDict(MutableMapping):
-    def __init__(self, store: MutableMapping,
-                 get_func: Optional[Callable[[_KT], _VT]] = None,
-                 contains_func: Optional[Callable[[_KT], _VT]] = None,
-                 *args, **kwargs) -> None:
-        self.store = store
-        self.update(dict(*args, **kwargs))
-        self.get_func = get_func
-        self.contains_func = contains_func
-
-    def __getitem__(self, key: _KT) -> _VT:
-        result = None
-        if self.get_func:
-            result = self.get_func(key)
-
-        if result:
-            return result
-        else:
-            return self.store[key]
-
-    def __contains__(self, key: object) -> bool:
-        result = None
-        if self.get_func:
-            result = self.contains_func(key)
-
-        if result:
-            return result
-        else:
-            return self.store.__contains__(key)
-
-    def __setitem__(self, key, value):
-        self.store[key] = value
-
-    def __delitem__(self, key):
-        del self.store[key]
-
-    def __iter__(self):
-        return iter(self.store)
-
-    def __len__(self):
-        return len(self.store)
-
-def make_function_dicts():
-    entity_type = PredicateType.get_type(Entity)
-    predicate_type = PredicateType.get_type(Predicate)
-
-    def is_entity(uri: str):
-        return uri.startswith("http://dbpedia.org/")
-
-    def is_predicate(uri: str):
-        return uri.startswith("htt")
-
-    def get_value_func(key):
-        if is_entity(key):
-            return lambda: Entity(key)
-        elif is_predicate(key):
-            return lambda: Predicate(key)
-        else:
-            return None
-
-    def get_type_func(key):
-        if is_entity(key):
-            return [entity_type]
-        elif is_predicate(key):
-            return [predicate_type]
-        else:
-            return None
-
-    def contains_func(key):
-        if is_entity(key):
-            # return 0 < int(key[1:]) <= max_entity_id
-            return True
-        elif is_predicate(key):
-            # return 0 < int(key[1:]) <= max_predicate_id
-            return True
-        else:
-            return None
-
-    return FuncDict(dict(), get_value_func, contains_func), FuncDict(defaultdict(list), get_type_func, contains_func)
-
-def record_call(func):
-    def parse_arg(arg):
-        if isinstance(arg, EntityResultSet):
-            return arg.entity
-        elif isinstance(arg, GraphPatternResultSet):
-            return arg.patterns
-        else:
-            return arg
-
-    @wraps(func)
-    def wrapper(self, *args, **kwargs):
-        results: ResultSet = func(self, *args, **kwargs)
-        args = [parse_arg(arg) for arg in args]
-        pushed_var = self.var_stack[-1] if self.var_stack else None
-        self.call_stack.append((func.__name__, pushed_var, args, parse_arg(results)))
-        return results
-    return wrapper
 
 class LCQuADLanguage(DomainLanguage):
     """
     Implements the functions in our custom variable-free functional query language for the LCQuAD dataset.
 
     """
-    def __init__(self, context: HdtQAContext):
+    def __init__(self, context: LCQuADContext):
         self.magic_replace = [(",", "MAGIC_COMMA"),
                  ("(", "MAGIC_LEFT_PARENTHESIS"),
                  (")", "MAGIC_RIGHT_PARENTHESIS")]
         self.context = context
-        start_types = {Number, Entity, Predicate}
-        functions, function_types = make_function_dicts()
-        self._functions: MutableMapping[str, Callable] = functions
-        self._function_types: Dict[str, List[PredicateType]] = function_types
-        self._start_types: Set[PredicateType] = set([PredicateType.get_type(type_) for type_ in start_types])
-        for name in dir(self):
-            if isinstance(getattr(self, name), types.MethodType):
-                function = getattr(self, name)
-                if getattr(function, '_is_predicate', False):
-                    side_arguments = getattr(function, '_side_arguments', None)
-                    self.add_predicate(name, function, side_arguments)
+        self.executor = context.executor
+        super().__init__(start_types={Entity})
 
-        # Caching this to avoid recomputing it every time `get_nonterminal_productions` is called.
-        self._nonterminal_productions: Dict[str, List[str]] = None
+        for predicate in context.question_predicates:
+            self.add_constant(predicate, Predicate(predicate), type_=Predicate)
+
+        for entity in context.question_entities:
+            self.add_constant(entity, Entity(entity), type_=Entity)
 
     def reset_state(self):
         self.var_counter = 0
         self.var_stack: List[int] = []
         self.pattern_stack: List[GraphPatternResultSet] = []
-        self.call_stack: List[Tuple] = []
 
-    def get_new_variable(self) -> Entity:
+    def get_new_variable(self) -> int:
         self.var_counter += 1
         return self.var_counter
 
     def query_hdt(self, result_set: GraphPatternResultSet):
-        fix_sub = lambda x: f"?{x}" if isinstance(x, int) else self.context.verify_uri(x, IdentifierPosition.Subject)
-        fix_obj = lambda x: f"?{x}" if isinstance(x, int) else self.context.verify_uri(x, IdentifierPosition.Object)
+        fix_sub = lambda x: f"?{x}" if isinstance(x, int) else self.executor.verify_uri(x, IdentifierPosition.Subject)
+        fix_obj = lambda x: f"?{x}" if isinstance(x, int) else self.executor.verify_uri(x, IdentifierPosition.Object)
 
         query = [(fix_sub(p[0]), p[1], fix_obj(p[2])) for p in result_set.patterns]
 
         out_var = f"?{self.var_stack.pop()}"
-        return set(self.context.join(query, out_var))
+        return set(self.executor.join(query, out_var))
 
     def execute(self, logical_form: str) -> Union[Iterable[str], bool, int]:
         self.reset_state()
@@ -340,7 +231,8 @@ class LCQuADLanguage(DomainLanguage):
 
 
 if __name__ == '__main__':
-    ctx = HdtQAContext('/data/nilesh/datasets/dbpedia/hdt/dbpedia2016-04en.hdt')
+    hdt = HDTDocument('/data/nilesh/datasets/dbpedia/hdt/dbpedia2016-04en.hdt', map=True, progress=True)
+    ctx = HdtExecutor(graph=hdt)
     l = LCQuADLanguage(ctx)
     # ers = l.execute('(find (get http://dbpedia.org/resource/Barack_Obama), (reverse http://dbpedia.org/ontology/religion))')
     # ers = l.execute('(intersection (find '
@@ -355,41 +247,41 @@ if __name__ == '__main__':
     # ers = l.execute('(find (find (get E2), P3), P4)')
     # ers = l.execute('(intersection (find (get E2), P2), (find (get E1), P1))')
 
-    import codecs, json
-    from tqdm import tqdm
-    import traceback
-    import time
-
-    start_time = time.time()
-
-    result_count = 0
-    template = "/data/nilesh/datasets/LC-QuAD/lcquad.annotated.funq.{}.json"
-    for split in ['train']:
-        newdataset = []
-        with codecs.open(template.format(split)) as fp:
-            data = json.load(fp)
-            for doc in tqdm(data):
-                # try:
-                query_time = time.time()
-                results = l.execute(doc['logical_form'])
-                if results:
-                    if isinstance(results, bool) or isinstance(results, int):
-                        results = [results]
-                    else:
-                        results = list(results)
-                else:
-                    results = []
-                query_time = time.time() - query_time
-                result_count += len(results)
-                doc['results'] = results
-                doc['time'] = query_time
-                newdataset.append(doc)
-                # except Exception as err:
-                #     print("ERROR")
-                #     traceback.print_tb(err.__traceback__)
-                #     print("\n\n", doc['logical_form'])
-
-        print("--- %s seconds ---" % (time.time() - start_time))
-
-        with codecs.open(template.format(f"{split}.results"), "w") as fp:
-            json.dump(newdataset, fp, indent=4, separators=(',', ': '), sort_keys=True)
+    # import codecs, json
+    # from tqdm import tqdm
+    # import traceback
+    # import time
+    #
+    # start_time = time.time()
+    #
+    # result_count = 0
+    # template = "/data/nilesh/datasets/LC-QuAD/lcquad.annotated.funq.{}.json"
+    # for split in ['train']:
+    #     newdataset = []
+    #     with codecs.open(template.format(split)) as fp:
+    #         data = json.load(fp)
+    #         for doc in tqdm(data):
+    #             # try:
+    #             query_time = time.time()
+    #             results = l.execute(doc['logical_form'])
+    #             if results:
+    #                 if isinstance(results, bool) or isinstance(results, int):
+    #                     results = [results]
+    #                 else:
+    #                     results = list(results)
+    #             else:
+    #                 results = []
+    #             query_time = time.time() - query_time
+    #             result_count += len(results)
+    #             doc['results'] = results
+    #             doc['time'] = query_time
+    #             newdataset.append(doc)
+    #             # except Exception as err:
+    #             #     print("ERROR")
+    #             #     traceback.print_tb(err.__traceback__)
+    #             #     print("\n\n", doc['logical_form'])
+    #
+    #     print("--- %s seconds ---" % (time.time() - start_time))
+    #
+    #     with codecs.open(template.format(f"{split}.results"), "w") as fp:
+    #         json.dump(newdataset, fp, indent=4, separators=(',', ': '), sort_keys=True)
