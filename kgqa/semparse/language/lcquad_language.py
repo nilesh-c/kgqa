@@ -2,7 +2,7 @@ from typing import Set, Union, List, Tuple, Any, Iterable
 
 from hdt import IdentifierPosition, HDTDocument
 
-from kgqa.semparse.context import HdtExecutor
+from kgqa.semparse.executor.hdt_executor import HdtExecutor
 from kgqa.semparse.context.lcquad_context import LCQuADContext
 from kgqa.semparse.executor.executor import Executor
 from kgqa.semparse.util import record_call
@@ -75,13 +75,13 @@ class LCQuADLanguage(DomainLanguage):
         return self.var_counter
 
     def query_hdt(self, result_set: GraphPatternResultSet):
-        fix_sub = lambda x: f"?{x}" if isinstance(x, int) else self.executor.verify_uri(x, IdentifierPosition.Subject)
-        fix_obj = lambda x: f"?{x}" if isinstance(x, int) else self.executor.verify_uri(x, IdentifierPosition.Object)
+        out_var = self.var_stack.pop()
+        fix_sub = lambda x: f"?{x}" if isinstance(x, int) else x
+        fix_obj = lambda x: f"?{x}" if isinstance(x, int) else x
 
         query = [(fix_sub(p[0]), p[1], fix_obj(p[2])) for p in result_set.patterns]
 
-        out_var = self.var_stack.pop()
-        return set(self.executor.join(query, out_var))
+        return set(self.executor.join(list(query), out_var))
 
     def execute(self, logical_form: str) -> Union[Iterable[str], bool, int]:
         self.reset_state()

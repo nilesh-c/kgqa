@@ -15,7 +15,7 @@ class Executor(ABC):
 
     @abstractmethod
     def join(self, patterns: List[Tuple[str, str, str]],
-             outvar: Optional[str]) -> Iterable:
+             outvar: Optional[int]) -> Iterable:
         """
         Joins a list of basic graph patterns and
         returns triples that match multiple triple patterns.

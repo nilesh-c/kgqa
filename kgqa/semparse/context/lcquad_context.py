@@ -1,13 +1,13 @@
 from typing import List
 from allennlp.data import Token
 
-from kgqa.semparse.executor.hdt_executor import HdtExecutor
+from kgqa.semparse.executor.executor import Executor
 
 
 class LCQuADContext:
     executor = None
 
-    def __init__(self, executor: HdtExecutor,
+    def __init__(self, executor: Executor,
                  question_tokens: List[Token],
                  question_entities: List[str],
                  question_predicates: List[str]):

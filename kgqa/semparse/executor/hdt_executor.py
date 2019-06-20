@@ -36,6 +36,7 @@ class HdtExecutor(Executor):
         Joins a list of basic graph patterns and
         returns triples that match multiple triple patterns.
         """
+        patterns = self._verify_uris(patterns)
         result_iter = self.graph.search_join(patterns)
         if outvar:
             return [uri for join_set in result_iter for var, uri in join_set if var == outvar]
@@ -83,6 +84,10 @@ class HdtExecutor(Executor):
         A generator of (predicate, object) tuples for the given subject
         """
         return [(p, o) for s, p, o in self.triples(subject=subject)[0]]
+
+    def _verify_uris(self, pattern: List[Tuple[str, str, str]]) -> List[Tuple[str, str, str]]:
+        verify = lambda x: x if x[0] == '?' else self._verify_uri(x)
+        return [(verify(s), p, verify(o)) for s, p, o in pattern]
 
     def _verify_uri(self, uri: str, position: IdentifierPosition) -> Optional[str]:
         uri = uri.replace("'", "")
