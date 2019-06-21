@@ -5,12 +5,14 @@ from hdt import IdentifierPosition, HDTDocument
 from kgqa.semparse.executor.hdt_executor import HdtExecutor
 from kgqa.semparse.context.lcquad_context import LCQuADContext
 from kgqa.semparse.executor.executor import Executor
-from kgqa.semparse.util import record_call
-
 try:
     from allennlp.semparse.domain_languages.domain_language import DomainLanguage, PredicateType, predicate
 except:
     from allennlp.semparse.domain_languages.domain_language import DomainLanguage, PredicateType, predicate
+
+magic_replace = [(",", "MAGIC_COMMA"),
+                 ("(", "MAGIC_LEFT_PARENTHESIS"),
+                 (")", "MAGIC_RIGHT_PARENTHESIS")]
 
 class Predicate(str):
     pass
@@ -19,7 +21,10 @@ class ReversedPredicate(Predicate):
     pass
 
 class Entity(str):
-    pass
+    def __new__(cls, uri: str):
+        for original, replace in magic_replace:
+            uri = uri.replace(replace, original)
+        return super().__new__(cls, uri)
 
 class ResultSet:
     pass
@@ -48,9 +53,6 @@ class LCQuADLanguage(DomainLanguage):
 
     """
     def __init__(self, context: LCQuADContext):
-        self.magic_replace = [(",", "MAGIC_COMMA"),
-                 ("(", "MAGIC_LEFT_PARENTHESIS"),
-                 (")", "MAGIC_RIGHT_PARENTHESIS")]
         self.context = context
         self.executor: Executor = context.executor
         super().__init__(start_types={Entity})
@@ -75,7 +77,7 @@ class LCQuADLanguage(DomainLanguage):
         return self.var_counter
 
     def _call_executor(self, result_set: GraphPatternResultSet):
-        out_var = self.var_stack.pop()
+        out_var = f"?{self.var_stack.pop()}"
         fix_sub = lambda x: f"?{x}" if isinstance(x, int) else x
         fix_obj = lambda x: f"?{x}" if isinstance(x, int) else x
 
@@ -206,8 +208,6 @@ class LCQuADLanguage(DomainLanguage):
         """
         Get entity and wrap it in a set.
         """
-        for original, replace in self.magic_replace:
-            entity = entity.replace(replace, original)
         return EntityResultSet(entity)
 
     @predicate
