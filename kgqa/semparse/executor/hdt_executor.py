@@ -86,10 +86,13 @@ class HdtExecutor(Executor):
         return [(p, o) for s, p, o in self.triples(subject=subject)[0]]
 
     def _verify_uris(self, pattern: List[Tuple[str, str, str]]) -> List[Tuple[str, str, str]]:
-        verify = lambda x: x if x[0] == '?' else self._verify_uri(x)
-        return [(verify(s), p, verify(o)) for s, p, o in pattern]
+        return [(self._verify_uri(s, IdentifierPosition.Subject), p,
+                 self._verify_uri(o, IdentifierPosition.Object)) for s, p, o in pattern]
 
     def _verify_uri(self, uri: str, position: IdentifierPosition) -> Optional[str]:
+        if uri[0] == '?':
+            return uri
+
         uri = uri.replace("'", "")
         sub_id = self.graph.convert_term(uri, position)
         if not sub_id:
