@@ -1,19 +1,13 @@
 import time
 from unittest import TestCase
 from typing import List
-from hdt import HDTDocument
 
+from kgqa.common.testcase import KGQATestCase
 from kgqa.semparse.context.lcquad_context import LCQuADContext
-from kgqa.semparse.executor.hdt_executor import HdtExecutor
 from kgqa.semparse.language import LCQuADLanguage
 
 
-class TestLCQuADLanguage(TestCase):
-    @classmethod
-    def setUpClass(self):
-        hdt = HDTDocument('/data/nilesh/datasets/dbpedia/hdt/dbpedia2016-04en.hdt', map=True, progress=True)
-        self.executor = HdtExecutor(graph=hdt)
-
+class LCQuADLanguageTest(KGQATestCase):
     def setUp(self):
         super().setUp()
         self.startTime = time.time()
