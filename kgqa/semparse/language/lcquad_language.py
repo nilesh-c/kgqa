@@ -1,4 +1,4 @@
-from typing import Set, Union, List, Tuple, Any, Iterable
+from typing import Set, Union, List, Tuple, Any, Iterable, Dict
 
 from hdt import IdentifierPosition, HDTDocument
 
@@ -55,13 +55,19 @@ class LCQuADLanguage(DomainLanguage):
     def __init__(self, context: LCQuADContext):
         self.context = context
         self.executor: Executor = context.executor
-        super().__init__(start_types={Entity})
+        super().__init__(start_types={Entity, ResultSet, Predicate, Count, Contains})
 
-        for predicate in context.question_predicates:
+        dbo_classes = set([dbo for dbo in context.question_predicates if dbo.split("/")[-1][0].isupper()])
+        binary_predicates = set(context.question_predicates) - dbo_classes
+
+        for predicate in binary_predicates:
             self.add_constant(predicate, Predicate(predicate), type_=Predicate)
 
         for entity in context.question_entities:
             self.add_constant(entity, Entity(entity), type_=Entity)
+
+        for dbo_class in dbo_classes:
+            self.add_constant(dbo_class, Entity(dbo_class), type_=Entity)
 
         self.var_counter = 0
         self.var_stack: List[int] = []
@@ -106,10 +112,19 @@ class LCQuADLanguage(DomainLanguage):
             pattern = (o, Predicate(p), s)
         return pattern
 
+
+
     def execute(self, logical_form: str) -> Union[Iterable[str], bool, int]:
         self._reset_state()
-        result: GraphPatternResultSet = super().execute(logical_form)
+        result = super().execute(logical_form)
+        return self.parse_result(result)
 
+    def execute_action_sequence(self, action_sequence: List[str], side_arguments: List[Dict] = None):
+        self._reset_state()
+        result = super().execute_action_sequence(action_sequence, side_arguments)
+        return self.parse_result(result)
+
+    def parse_result(self, result):
         out = None
         if isinstance(result, GraphPatternResultSet):
             out = self._call_executor(result)
