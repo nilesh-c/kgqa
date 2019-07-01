@@ -68,7 +68,7 @@ class LCQuADSparqlToFunQuery:
             # LC-QuAD has simple triple-based ASK queries; trivial to compute the output
             triple = triples[0]
             if self.lisp_style:
-                out = "(contains (find (get {}), {}), (get {}))".format(*self.map_to_id(triple[2], triple[1], triple[0]))
+                out = "(contains (find (get {}) {}) (get {}))".format(*self.map_to_id(triple[2], triple[1], triple[0]))
             else:
                 out = "contains(find(<{}>, <{}>), <{}>)".format(*self.map_to_id(triple[2], triple[1], triple[0]))
         else:
@@ -96,12 +96,12 @@ class LCQuADSparqlToFunQuery:
                     s, p, o = self.map_to_id(s, p, o)
                     if s == Variable('x'):
                         if self.lisp_style:
-                            x_finds.append("(find (get {}), {})".format(o, p))
+                            x_finds.append("(find (get {}) {})".format(o, p))
                         else:
                             x_finds.append("find(<{}>, <{}>)".format(o, p))
                     if o == Variable('x'):
                         if self.lisp_style:
-                            x_finds.append("(find (get {}), (reverse {}))".format(s, p))
+                            x_finds.append("(find (get {}) (reverse {}))".format(s, p))
                         else:
                             x_finds.append("find(<{}>, reverse(<{}>))".format(s, p))
 
@@ -112,7 +112,7 @@ class LCQuADSparqlToFunQuery:
                     x_finds = x_finds[0]
                 else:
                     if self.lisp_style:
-                        x_finds = reduce(lambda a, b: "(intersection {}, {})".format(a, b), x_finds)
+                        x_finds = reduce(lambda a, b: "(intersection {} {})".format(a, b), x_finds)
                     else:
                         x_finds = reduce(lambda a, b: "intersection({}, {})".format(a, b), x_finds)
 
@@ -128,26 +128,26 @@ class LCQuADSparqlToFunQuery:
                     if Variable('x') not in [s, o]:
                         # If no ?x references in subject or object, we have a simple find() retrieval output
                         if s == Variable(select):
-                            select_finds.append("(find (get {}), {})".format(o, p))
+                            select_finds.append("(find (get {}) {})".format(o, p))
                         if o == Variable(select):
                             select_finds.append("(find (get {}), (reverse {}))".format(s, p))
                     else:
                         # If we have a blank node ?x, paste x_finds in its place
                         if s == Variable('x'):
-                            select_finds.append("(find {}, (reverse {}))".format(x_finds, p))
+                            select_finds.append("(find {} (reverse {}))".format(x_finds, p))
                         if o == Variable('x'):
                             select_finds.append("(find {}, {})".format(x_finds, p))
                 else:
                     if Variable('x') not in [s, o]:
                         # If no ?x references in subject or object, we have a simple find() retrieval output
                         if s == Variable(select):
-                            select_finds.append("find(<{}>, <{}>)".format(o, p))
+                            select_finds.append("find(<{}> <{}>)".format(o, p))
                         if o == Variable(select):
                             select_finds.append("find(<{}>, reverse(<{}>))".format(s, p))
                     else:
                         # If we have a blank node ?x, paste x_finds in its place
                         if s == Variable('x'):
-                            select_finds.append("find({}, reverse(<{}>))".format(x_finds, p))
+                            select_finds.append("find({} reverse(<{}>))".format(x_finds, p))
                         if o == Variable('x'):
                             select_finds.append("find({}, <{}>)".format(x_finds, p))
 
@@ -156,7 +156,7 @@ class LCQuADSparqlToFunQuery:
                 select_finds = select_finds[0]
             else:
                 if self.lisp_style:
-                    select_finds = reduce(lambda a, b: "(intersection {}, {})".format(a, b), select_finds)
+                    select_finds = reduce(lambda a, b: "(intersection {} {})".format(a, b), select_finds)
                 else:
                     select_finds = reduce(lambda a, b: "intersection({}, {})".format(a, b), select_finds)
 
@@ -266,6 +266,7 @@ def generateFromAnnotatedLCQuAD(infile: str, converter: LCQuADSparqlToFunQuery):
 
 if __name__ == '__main__':
     dir_prefix = '/data/nilesh/datasets/LC-QuAD/'
+    # dir_prefix = '/Users/nilesh/python/datasets/lcquad/LC-QuAD/'
 
     # print("Loading DBpedia ID indexes")
     # with codecs.open("/data/nilesh/datasets/dbpedia/triples.index.pickle.new", "rb") as f:
