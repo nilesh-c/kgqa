@@ -1,0 +1,450 @@
+[
+    {
+        "question": "Which comic characters are painted by Bill Finger?",
+        "question_mapped": "Which comic characters are painted by ENT_1?",
+        "logical_form": "(intersection (find (get http://dbpedia.org/ontology/ComicsCharacter) https://www.w3.org/1999/02/22-rdf-syntax-ns#type) (find (get http://dbpedia.org/resource/Bill_Finger) http://dbpedia.org/ontology/creator))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/Bill_Finger",
+                "locations": [
+                    [
+                        38,
+                        49
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "Was winston churchill the prime minister of Selwyn Lloyd?",
+        "question_mapped": "Was ENT_1 the prime minister of Selwyn LloydENT_2",
+        "logical_form": "(contains (find (get http://dbpedia.org/resource/Winston_Churchill) http://dbpedia.org/ontology/primeMinister) (get http://dbpedia.org/resource/Selwyn_Lloyd))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/Winston_Churchill",
+                "locations": [
+                    [
+                        4,
+                        21
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            },
+            {
+                "uri": "http://dbpedia.org/resource/Selwyn_Lloyd",
+                "locations": [
+                    [
+                        44,
+                        56
+                    ]
+                ],
+                "placeholder": "ENT_2",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "Name some leaders of the parent organisation of the Gestapo?",
+        "question_mapped": "Name some leaders of the parent organisation of the ENT_1?",
+        "logical_form": "(find (find (get http://dbpedia.org/resource/Gestapo) (reverse http://dbpedia.org/ontology/parentOrganisation)) (reverse http://dbpedia.org/ontology/leader))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/Gestapo",
+                "locations": [
+                    [
+                        52,
+                        59
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "In which monarch did Li Si succeed someone?",
+        "question_mapped": "In which monarch did ENT_1 succeed someone?",
+        "logical_form": "(find (find (get http://dbpedia.org/resource/Li_Si) http://dbpedia.org/ontology/successor) (reverse http://dbpedia.org/ontology/monarch))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/Li_Si",
+                "locations": [
+                    [
+                        21,
+                        26
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "Which home town of PAvel Moroz is the death location of the Yakov Estrin ?",
+        "question_mapped": "Which home town of ENT_2 is the death location of the ENT_1 ?",
+        "logical_form": "(intersection (find (get http://dbpedia.org/resource/Yakov_Estrin), (reverse http://dbpedia.org/ontology/deathPlace)) (find (get http://dbpedia.org/resource/Pavel_Moroz), (reverse http://dbpedia.org/property/hometown)))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/Yakov_Estrin",
+                "locations": [
+                    [
+                        60,
+                        72
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            },
+            {
+                "uri": "http://dbpedia.org/resource/Pavel_Moroz",
+                "locations": [
+                    [
+                        19,
+                        30
+                    ]
+                ],
+                "placeholder": "ENT_2",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "Which company which assembles its cars in Broadmeadows, Victoria?",
+        "question_mapped": "Which company which assembles its cars in ENT_1?",
+        "logical_form": "(find (intersection (find (get http://dbpedia.org/resource/BroadmeadowsMAGIC_COMMA_Victoria) http://dbpedia.org/property/assembly) (find (get http://dbpedia.org/ontology/Automobile) https://www.w3.org/1999/02/22-rdf-syntax-ns#type)) (reverse http://dbpedia.org/ontology/parentCompany))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/Broadmeadows,_Victoria",
+                "locations": [
+                    [
+                        42,
+                        64
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "Name the scientist whose supervisor was Ernest Rutherford and had a doctoral students named Charles Drummond Ellis?",
+        "question_mapped": "Name the scientist whose supervisor was ENT_2 and had a doctoral students named ENT_1?",
+        "logical_form": "(intersection (intersection (find (get http://dbpedia.org/resource/Ernest_Rutherford) http://dbpedia.org/ontology/doctoralAdvisor) (find (get http://dbpedia.org/resource/Charles_Drummond_Ellis) http://dbpedia.org/property/doctoralStudents)) (find (get http://dbpedia.org/ontology/Scientist) https://www.w3.org/1999/02/22-rdf-syntax-ns#type))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/Charles_Drummond_Ellis",
+                "locations": [
+                    [
+                        92,
+                        114
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            },
+            {
+                "uri": "http://dbpedia.org/resource/Ernest_Rutherford",
+                "locations": [
+                    [
+                        40,
+                        57
+                    ]
+                ],
+                "placeholder": "ENT_2",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "Where was the designer of REP Parasol born?",
+        "question_mapped": "Where was the designer of ENT_1 born?",
+        "logical_form": "(find (find (get http://dbpedia.org/resource/REP_Parasol) (reverse http://dbpedia.org/ontology/designer)) (reverse http://dbpedia.org/ontology/birthPlace))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/REP_Parasol",
+                "locations": [
+                    [
+                        26,
+                        37
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "What is the common affiliation of the Monroe Carell Jr. Children's Hospital at Vanderbilt and alma mater of the Duncan U. Fletcher?",
+        "question_mapped": "What is the common affiliation of the ENT_1 and alma mater of the Duncan U. Fletcher?ENT_2",
+        "logical_form": "(intersection (find (get http://dbpedia.org/resource/Duncan_U._Fletcher), (reverse http://dbpedia.org/ontology/almaMater)) (find (get http://dbpedia.org/resource/Monroe_Carell_Jr._Children's_Hospital_at_Vanderbilt), (reverse http://dbpedia.org/property/affiliation)))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/Monroe_Carell_Jr._Children's_Hospital_at_Vanderbilt",
+                "locations": [
+                    [
+                        38,
+                        89
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            },
+            {
+                "uri": "http://dbpedia.org/resource/Duncan_U._Fletcher",
+                "locations": [
+                    [
+                        112,
+                        130
+                    ]
+                ],
+                "placeholder": "ENT_2",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "What is the hometown of Nader Guirat, where Josef Johansson was born too?",
+        "question_mapped": "What is the hometown of ENT_2, where ENT_1 was born too?",
+        "logical_form": "(intersection (find (get http://dbpedia.org/resource/Nader_Guirat), (reverse http://dbpedia.org/ontology/hometown)) (find (get http://dbpedia.org/resource/Josef_Johansson), (reverse http://dbpedia.org/property/birthPlace)))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/Josef_Johansson",
+                "locations": [
+                    [
+                        44,
+                        59
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            },
+            {
+                "uri": "http://dbpedia.org/resource/Nader_Guirat",
+                "locations": [
+                    [
+                        24,
+                        36
+                    ]
+                ],
+                "placeholder": "ENT_2",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "How many shows does HBO have?",
+        "question_mapped": "How many shows does ENT_1 have?",
+        "logical_form": "(count (intersection (find (get http://dbpedia.org/ontology/TelevisionShow) https://www.w3.org/1999/02/22-rdf-syntax-ns#type) (find (get http://dbpedia.org/resource/HBO) http://dbpedia.org/ontology/company)))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/HBO",
+                "locations": [
+                    [
+                        20,
+                        23
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "Which share holder of outlook is also the content license of the MSX Basics ?",
+        "question_mapped": "Which share holder of ENT_2 is also the content license of the ENT_1s ?",
+        "logical_form": "(intersection (find (get http://dbpedia.org/resource/MSX_BASIC), (reverse http://dbpedia.org/property/license)) (find (get http://dbpedia.org/resource/Outlook_on_the_web), (reverse http://dbpedia.org/property/owner)))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/MSX_BASIC",
+                "locations": [
+                    [
+                        65,
+                        74
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            },
+            {
+                "uri": "http://dbpedia.org/resource/Outlook_on_the_web",
+                "locations": [
+                    [
+                        22,
+                        29
+                    ]
+                ],
+                "placeholder": "ENT_2",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "On how many different grounds were seasons chaired by Ronaldo held?",
+        "question_mapped": "On how many different grounds were seasons chaired by ENT_1 held?",
+        "logical_form": "(count (find (find (get http://dbpedia.org/resource/Ronaldo) http://dbpedia.org/ontology/chairman) (reverse http://dbpedia.org/ontology/ground)))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/Ronaldo",
+                "locations": [
+                    [
+                        54,
+                        61
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "Where was the battle fought where 2nd Foreign Infantry Regiment participated  ?",
+        "question_mapped": "Where was the battle fought where ENT_1 participated  ?",
+        "logical_form": "(find (intersection (find (get http://dbpedia.org/resource/2nd_Foreign_Infantry_Regiment) (reverse http://dbpedia.org/ontology/battle)) (find (get http://dbpedia.org/ontology/MilitaryConflict) https://www.w3.org/1999/02/22-rdf-syntax-ns#type)) (reverse http://dbpedia.org/ontology/territory))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/2nd_Foreign_Infantry_Regiment",
+                "locations": [
+                    [
+                        34,
+                        63
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "What is the operator of SR class 3Sub ?",
+        "question_mapped": "What is the operator of ENT_1 ?",
+        "logical_form": "(find (get http://dbpedia.org/resource/SR_class_3Sub), (reverse http://dbpedia.org/ontology/operator))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/SR_class_3Sub",
+                "locations": [
+                    [
+                        24,
+                        37
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "Which band's  former member are Kevin Jonas and Joe Jonas?",
+        "question_mapped": "Which band's  former member are ENT_1 and Joe JoENT_2",
+        "logical_form": "(intersection (intersection (find (get http://dbpedia.org/resource/Joe_Jonas) http://dbpedia.org/property/pastMembers) (find (get http://dbpedia.org/ontology/Band) https://www.w3.org/1999/02/22-rdf-syntax-ns#type)) (find (get http://dbpedia.org/resource/Kevin_Jonas) http://dbpedia.org/ontology/formerBandMember))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/Kevin_Jonas",
+                "locations": [
+                    [
+                        32,
+                        43
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            },
+            {
+                "uri": "http://dbpedia.org/resource/Joe_Jonas",
+                "locations": [
+                    [
+                        48,
+                        57
+                    ]
+                ],
+                "placeholder": "ENT_2",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "Name the tenants of O.co Coliseum ?",
+        "question_mapped": "Name the tenants of ENT_1 ?",
+        "logical_form": "(find (get http://dbpedia.org/resource/O.co_Coliseum), (reverse http://dbpedia.org/ontology/tenant))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/O.co_Coliseum",
+                "locations": [
+                    [
+                        20,
+                        33
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "which politician is currently ruling over Rishikesh?",
+        "question_mapped": "which politician is currently ruling over ENT_1?",
+        "logical_form": "(find (get http://dbpedia.org/resource/Rishikesh), (reverse http://dbpedia.org/ontology/leaderName))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/Rishikesh",
+                "locations": [
+                    [
+                        42,
+                        51
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "Is north america one of the destinations of airtours airways?",
+        "question_mapped": "Is ENT_1 one of the destinations of airtoursENT_2?",
+        "logical_form": "(contains (find (get http://dbpedia.org/resource/North_America) http://dbpedia.org/ontology/destination) (get http://dbpedia.org/resource/Airtours_International_Airways))",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/North_America",
+                "locations": [
+                    [
+                        3,
+                        16
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            },
+            {
+                "uri": "http://dbpedia.org/resource/Airtours_International_Airways",
+                "locations": [
+                    [
+                        44,
+                        52
+                    ]
+                ],
+                "placeholder": "ENT_2",
+                "errors": 0
+            }
+        ]
+    },
+    {
+        "question": "Who have done their PhDs under a National Medal of Science winner?",
+        "question_mapped": "Who have done their PhDs under a ENT_1 winner?",
+        "logical_form": "(find (find (get http://dbpedia.org/resource/National_Medal_of_Science) http://dbpedia.org/property/prizes), http://dbpedia.org/property/doctoralAdvisor)",
+        "entities": [
+            {
+                "uri": "http://dbpedia.org/resource/National_Medal_of_Science",
+                "locations": [
+                    [
+                        33,
+                        58
+                    ]
+                ],
+                "placeholder": "ENT_1",
+                "errors": 0
+            }
+        ]
+    }
+]
