@@ -268,6 +268,7 @@ def generateFromAnnotatedLCQuAD(infile: str, converter: LCQuADSparqlToFunQuery):
                             'entities': list(entities.values())})
     return dataset
 
+
 if __name__ == '__main__':
     dir_prefix = '/data/nilesh/datasets/LC-QuAD/'
     # dir_prefix = '/Users/nilesh/python/datasets/lcquad/LC-QuAD/'
