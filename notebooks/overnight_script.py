@@ -141,7 +141,8 @@ class Seq2Seq(SimpleSeq2Seq):
 
 
 
-def run(trainp, testp,
+def run(trainp="overnight/calendar_train_delex.tsv",
+        testp="overnight/calendar_test_delex.tsv",
         batsize=8,
         embdim=50,
         encdim=50,
@@ -238,6 +239,5 @@ def run(trainp, testp,
 
 
 if __name__ == '__main__':
-    run("overnight/calendar_train_delex.tsv",
-        "overnight/calendar_test_delex.tsv")
+    q.argprun(run)
 
