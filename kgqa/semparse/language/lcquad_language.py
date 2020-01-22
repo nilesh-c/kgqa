@@ -1,7 +1,9 @@
 from typing import Set, Union, List, Tuple, Any, Iterable, Dict
 
+from allennlp.semparse import ExecutionError, ParsingError
 from hdt import IdentifierPosition, HDTDocument
 
+from kgqa.semparse.executor import StubExecutor
 from kgqa.semparse.executor.hdt_executor import HdtExecutor
 from kgqa.semparse.context.lcquad_context import LCQuADContext
 from kgqa.semparse.executor.executor import Executor
@@ -14,6 +16,19 @@ magic_replace = [(",", "MAGIC_COMMA"),
                  ("(", "MAGIC_LEFT_PARENTHESIS"),
                  (")", "MAGIC_RIGHT_PARENTHESIS")]
 
+def demagicify(uri: str):
+    for original, magic_str in magic_replace:
+        uri = uri.replace(magic_str, original)
+    return uri
+
+def magicify(uri: str):
+    for original, magic_str in magic_replace:
+        uri = uri.replace(original, magic_str)
+    return uri
+
+START_SYMBOL = '@start@'
+END_SYMBOL = '@end@'
+
 class Predicate(str):
     pass
 
@@ -22,9 +37,7 @@ class ReversedPredicate(Predicate):
 
 class Entity(str):
     def __new__(cls, uri: str):
-        for original, replace in magic_replace:
-            uri = uri.replace(replace, original)
-        return super().__new__(cls, uri)
+        return super().__new__(cls, demagicify(uri))
 
 class ResultSet:
     pass
@@ -64,7 +77,7 @@ class LCQuADLanguage(DomainLanguage):
             self.add_constant(predicate, Predicate(predicate), type_=Predicate)
 
         for entity in context.question_entities:
-            self.add_constant(entity, Entity(entity), type_=Entity)
+            self.add_constant(magicify(entity), Entity(entity), type_=Entity)
 
         for dbo_class in dbo_classes:
             self.add_constant(dbo_class, Entity(dbo_class), type_=Entity)
@@ -120,9 +133,30 @@ class LCQuADLanguage(DomainLanguage):
         return self.parse_result(result)
 
     def execute_action_sequence(self, action_sequence: List[str], side_arguments: List[Dict] = None):
+        if isinstance(self.executor, StubExecutor):
+            return None
+
         self._reset_state()
-        result = super().execute_action_sequence(action_sequence, side_arguments)
-        return self.parse_result(result)
+        try:
+            result = super().execute_action_sequence(action_sequence, side_arguments)
+            return self.parse_result(result)
+        except (ExecutionError, AssertionError, IndexError) as e:
+            return None
+
+    def action_sequence_to_logical_form(self, action_sequence: List[str]) -> str:
+        if isinstance(self.executor, StubExecutor):
+            return None
+
+        self._reset_state()
+        try:
+            return super().action_sequence_to_logical_form(action_sequence)
+        except (ParsingError) as e:
+            return None
+
+    def logical_form_to_action_sequence(self, logical_form: str) -> List[str]:
+        self._reset_state()
+        return super().logical_form_to_action_sequence(logical_form)
+
 
     def parse_result(self, result):
         out = None
@@ -249,8 +283,8 @@ class LCQuADLanguage(DomainLanguage):
 
 if __name__ == '__main__':
     hdt = HDTDocument('/data/nilesh/datasets/dbpedia/hdt/dbpedia2016-04en.hdt', map=True, progress=True)
-    ctx = HdtExecutor(graph=hdt)
-    l = LCQuADLanguage(ctx)
+    executor = HdtExecutor(graph=hdt)
+    # l = LCQuADLanguage(ctx)
     # ers = l.execute('(find (get http://dbpedia.org/resource/Barack_Obama), (reverse http://dbpedia.org/ontology/religion))')
     # ers = l.execute('(intersection (find '
     #                 '(find (get http://dbpedia.org/resource/Barack_Obama),(reverse http://dbpedia.org/ontology/religion)),'
