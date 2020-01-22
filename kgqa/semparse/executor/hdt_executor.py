@@ -15,7 +15,7 @@ class HdtExecutor(Executor):
         if graph:
             self.graph = graph
         else:
-            self.graph = HDTDocument(hdt_path, map=False, progress=True)
+            self.graph = HDTDocument(hdt_path, map=True, progress=True)
 
     @cached
     def triples(self, subject: Optional[str]='',
