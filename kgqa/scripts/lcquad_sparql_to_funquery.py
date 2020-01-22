@@ -130,24 +130,24 @@ class LCQuADSparqlToFunQuery:
                         if s == Variable(select):
                             select_finds.append("(find (get {}) {})".format(o, p))
                         if o == Variable(select):
-                            select_finds.append("(find (get {}), (reverse {}))".format(s, p))
+                            select_finds.append("(find (get {}) (reverse {}))".format(s, p))
                     else:
                         # If we have a blank node ?x, paste x_finds in its place
                         if s == Variable('x'):
                             select_finds.append("(find {} (reverse {}))".format(x_finds, p))
                         if o == Variable('x'):
-                            select_finds.append("(find {}, {})".format(x_finds, p))
+                            select_finds.append("(find {} {})".format(x_finds, p))
                 else:
                     if Variable('x') not in [s, o]:
                         # If no ?x references in subject or object, we have a simple find() retrieval output
                         if s == Variable(select):
-                            select_finds.append("find(<{}> <{}>)".format(o, p))
+                            select_finds.append("find(<{}>, <{}>)".format(o, p))
                         if o == Variable(select):
                             select_finds.append("find(<{}>, reverse(<{}>))".format(s, p))
                     else:
                         # If we have a blank node ?x, paste x_finds in its place
                         if s == Variable('x'):
-                            select_finds.append("find({} reverse(<{}>))".format(x_finds, p))
+                            select_finds.append("find({}, reverse(<{}>))".format(x_finds, p))
                         if o == Variable('x'):
                             select_finds.append("find({}, <{}>)".format(x_finds, p))
 
