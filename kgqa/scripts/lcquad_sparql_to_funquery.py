@@ -16,6 +16,7 @@ magic_replace = [(",", "MAGIC_COMMA"),
                  ("(", "MAGIC_LEFT_PARENTHESIS"),
                  (")", "MAGIC_RIGHT_PARENTHESIS")]
 
+
 class LCQuADSparqlToFunQuery:
     def __init__(self, entity_to_id: Dict[str, int] = {}, predicate_to_id: Dict[str, int] = {}, lisp_style=True):
         """
@@ -171,6 +172,7 @@ class LCQuADSparqlToFunQuery:
 
         return out
 
+
 def generateFromOriginalLCQuAD(infile: str, converter: LCQuADSparqlToFunQuery):
     print(f"Parsing {infile}")
     with codecs.open(infile) as fp:
@@ -183,12 +185,14 @@ def generateFromOriginalLCQuAD(infile: str, converter: LCQuADSparqlToFunQuery):
             dataset.append({'question': q, 'logical_form': g})
     return dataset
 
+
 def fuzzy_substrings(pattern, string, error, ignorecase=True):
     matches = re.finditer(f"({re.escape(pattern)}){{e<={error}}}", string, re.IGNORECASE if ignorecase else 0)
     if matches:
         return [match.span() for match in matches]
     else:
         return None
+
 
 def generateFromAnnotatedLCQuAD(infile: str, converter: LCQuADSparqlToFunQuery):
     print(f"Parsing {infile}")
@@ -263,6 +267,7 @@ def generateFromAnnotatedLCQuAD(infile: str, converter: LCQuADSparqlToFunQuery):
                             'logical_form': g,
                             'entities': list(entities.values())})
     return dataset
+
 
 if __name__ == '__main__':
     dir_prefix = '/data/nilesh/datasets/LC-QuAD/'
