@@ -1,5 +1,5 @@
 from overrides import overrides
-from typing import List
+from typing import Set
 
 from allennlp.training.metrics.metric import Metric
 
@@ -14,18 +14,17 @@ class AveragePrecision(Metric):
         self._count = 0
 
     @overrides
-    def __call__(self, relevant: List[str], retrieved: List[str]):
+    def __call__(self, relevant: Set[str], retrieved: Set[str]):
         """
         Adds instant's precision to the total precision.
 
         Parameters
         ----------
-        relevant : ``List[str]``
-            List of relevant answers.
-        retrieved : ``List[str]``
-            List of retrieved answers.
+        relevant : ``Set[str]``
+            Set of relevant answers.
+        retrieved : ``Set[str]``
+            Set of retrieved answers.
         """
-        relevant, retrieved = set(relevant), set(retrieved)
         if len(retrieved) != 0:
             instance_precision = len(relevant.intersection(retrieved)) / len(retrieved)
         else:
