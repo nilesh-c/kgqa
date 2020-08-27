@@ -1,6 +1,5 @@
 from typing import Set, Union, List, Tuple, Any, Iterable, Dict
 
-from allennlp.semparse import ExecutionError, ParsingError
 from hdt import IdentifierPosition, HDTDocument
 
 from kgqa.semparse.executor import StubExecutor
@@ -11,6 +10,12 @@ try:
     from allennlp.semparse.domain_languages.domain_language import DomainLanguage, PredicateType, predicate
 except:
     from allennlp.semparse.domain_languages.domain_language import DomainLanguage, PredicateType, predicate
+
+try:
+    from allennlp.semparse import ExecutionError, ParsingError
+except:
+    from allennlp.semparse import ExecutionError, ParsingError
+
 
 magic_replace = [(",", "MAGIC_COMMA"),
                  ("(", "MAGIC_LEFT_PARENTHESIS"),
@@ -32,30 +37,20 @@ END_SYMBOL = '@end@'
 class Predicate(str):
     pass
 
-class ReversedPredicate(Predicate):
-    pass
-
 class Entity(str):
     def __new__(cls, uri: str):
         return super().__new__(cls, demagicify(uri))
 
 class ResultSet:
-    pass
-
-class EntityResultSet(ResultSet):
-    def __init__(self, entity: Entity):
-        self.entity = entity
-
-class GraphPatternResultSet(ResultSet):
     def __init__(self, patterns: Set[Tuple[Any, Predicate, Any]]):
         self.patterns = patterns
 
 class Count:
-    def __init__(self, result_set: GraphPatternResultSet):
+    def __init__(self, result_set: ResultSet):
         self.result_set = result_set
 
 class Contains:
-    def __init__(self, subset: ResultSet, superset: ResultSet):
+    def __init__(self, subset: Entity, superset: ResultSet):
         self.superset = superset
         self.subset = subset
 
@@ -75,6 +70,8 @@ class LCQuADLanguage(DomainLanguage):
 
         for predicate in binary_predicates:
             self.add_constant(predicate, Predicate(predicate), type_=Predicate)
+            reversed_predicate = f"-{predicate}"
+            self.add_constant(reversed_predicate, Predicate(reversed_predicate), type_=Predicate)
 
         for entity in context.question_entities:
             self.add_constant(magicify(entity), Entity(entity), type_=Entity)
@@ -84,18 +81,18 @@ class LCQuADLanguage(DomainLanguage):
 
         self.var_counter = 0
         self.var_stack: List[int] = []
-        self.pattern_stack: List[GraphPatternResultSet] = []
+        self.pattern_stack: List[ResultSet] = []
 
     def _reset_state(self):
         self.var_counter = 0
         self.var_stack: List[int] = []
-        self.pattern_stack: List[GraphPatternResultSet] = []
+        self.pattern_stack: List[ResultSet] = []
 
     def _get_new_variable(self) -> int:
         self.var_counter += 1
         return self.var_counter
 
-    def _call_executor(self, result_set: GraphPatternResultSet):
+    def _call_executor(self, result_set: ResultSet):
         out_var = f"?{self.var_stack.pop()}"
         fix_sub = lambda x: f"?{x}" if isinstance(x, int) else x
         fix_obj = lambda x: f"?{x}" if isinstance(x, int) else x
@@ -121,8 +118,8 @@ class LCQuADLanguage(DomainLanguage):
     @staticmethod
     def _reverse_check(pattern: Tuple[Any, Predicate, Any]) -> Tuple[Any, Predicate, Any]:
         s, p, o = pattern
-        if isinstance(p, ReversedPredicate):
-            pattern = (o, Predicate(p), s)
+        if p.startswith("-"):
+            pattern = (o, Predicate(p[1:]), s)
         return pattern
 
 
@@ -137,11 +134,11 @@ class LCQuADLanguage(DomainLanguage):
             return None
 
         self._reset_state()
-        try:
-            result = super().execute_action_sequence(action_sequence, side_arguments)
-            return self.parse_result(result)
-        except (ExecutionError, AssertionError, IndexError) as e:
-            return None
+        # try:
+        result = super().execute_action_sequence(action_sequence, side_arguments)
+        return self.parse_result(result)
+        # except (ExecutionError, AssertionError, IndexError) as e:
+        #     return None
 
     def action_sequence_to_logical_form(self, action_sequence: List[str]) -> str:
         if isinstance(self.executor, StubExecutor):
@@ -160,22 +157,22 @@ class LCQuADLanguage(DomainLanguage):
 
     def parse_result(self, result):
         out = None
-        if isinstance(result, GraphPatternResultSet):
+        if isinstance(result, ResultSet):
             out = self._call_executor(result)
 
         elif isinstance(result, Contains):
             superset, subset = result.superset, result.subset
 
-            if isinstance(superset, EntityResultSet) and isinstance(subset, EntityResultSet):
-                superset = {str(superset.entity)}
-                subset = {str(subset.entity)}
+            if isinstance(superset, Entity) and isinstance(subset, Entity):
+                superset = {str(superset)}
+                subset = {str(subset)}
 
-            elif isinstance(superset, GraphPatternResultSet):
-                if isinstance(subset, GraphPatternResultSet):
+            elif isinstance(superset, ResultSet):
+                if isinstance(subset, ResultSet):
                     subset = self._call_executor(subset)
 
-                elif isinstance(subset, EntityResultSet):
-                    subset = {str(subset.entity)}
+                elif isinstance(subset, Entity):
+                    subset = {str(subset)}
 
                 superset = self._call_executor(superset)
                 if not subset:
@@ -193,32 +190,37 @@ class LCQuADLanguage(DomainLanguage):
         return out
 
     @predicate
-    def find(self, intermediate_results: ResultSet, predicate: Predicate) -> ResultSet:
+    def find(self, object_entity: Entity, predicate: Predicate) -> ResultSet:
         """
         Takes an entity e and a predicate p and returns the set of entities that
         have an outgoing edge p to e.
 
         """
-        if isinstance(intermediate_results, EntityResultSet):
-            object_entity = intermediate_results.entity
+        new_var = self._get_new_variable()
+        new_pattern = (new_var, predicate, object_entity)
+        gpset = ResultSet({self._reverse_check(new_pattern)})
 
-            new_var = self._get_new_variable()
-            new_pattern = (new_var, predicate, object_entity)
-            gpset = GraphPatternResultSet({self._reverse_check(new_pattern)})
+        self.var_stack.append(new_var)
+        self.pattern_stack.append(gpset)
 
-            self.var_stack.append(new_var)
-            self.pattern_stack.append(gpset)
-        else:
-            assert isinstance(intermediate_results, GraphPatternResultSet)
-            popped_var = self.var_stack.pop()
-            popped_patterns = self.pattern_stack.pop().patterns
+        return gpset
 
-            new_var = self._get_new_variable()
-            new_pattern = (new_var, predicate, popped_var)
-            gpset = GraphPatternResultSet(popped_patterns | {self._reverse_check(new_pattern)})
+    @predicate
+    def findSet(self, intermediate_results: ResultSet, predicate: Predicate) -> ResultSet:
+        """
+        Takes a set of entities e and a predicate p and returns the set of entities that
+        have an outgoing edge p to all entities in e (JOIN).
 
-            self.var_stack.append(new_var)
-            self.pattern_stack.append(gpset)
+        """
+        popped_var = self.var_stack.pop()
+        popped_patterns = self.pattern_stack.pop().patterns
+
+        new_var = self._get_new_variable()
+        new_pattern = (new_var, predicate, popped_var)
+        gpset = ResultSet(popped_patterns | {self._reverse_check(new_pattern)})
+
+        self.var_stack.append(new_var)
+        self.pattern_stack.append(gpset)
 
         return gpset
 
@@ -227,8 +229,8 @@ class LCQuADLanguage(DomainLanguage):
         """
         Return intersection of two sets of entities.
         """
-        assert isinstance(intermediate_results1, GraphPatternResultSet)
-        assert isinstance(intermediate_results2, GraphPatternResultSet)
+        assert isinstance(intermediate_results1, ResultSet)
+        assert isinstance(intermediate_results2, ResultSet)
         popped_var1 = self.var_stack.pop()
         popped_var2 = self.var_stack.pop()
         popped_patterns1 = self.pattern_stack.pop().patterns
@@ -245,26 +247,12 @@ class LCQuADLanguage(DomainLanguage):
         popped_patterns1 = set(map(replace_func, popped_patterns1))
         popped_patterns2 = set(map(replace_func, popped_patterns2))
 
-        gpset = GraphPatternResultSet(popped_patterns1 | popped_patterns2)
+        gpset = ResultSet(popped_patterns1 | popped_patterns2)
 
         self.var_stack.append(lesser)
         self.pattern_stack.append(gpset)
 
         return gpset
-
-    @predicate
-    def get(self, entity: Entity) -> ResultSet:
-        """
-        Get entity and wrap it in a set.
-        """
-        return EntityResultSet(entity)
-
-    @predicate
-    def reverse(self, predicate: Predicate) -> Predicate:
-        """
-        Return the reverse of given predicate.
-        """
-        return ReversedPredicate(predicate)
 
     @predicate
     def count(self, intermediate_results: ResultSet) -> Count:
@@ -274,7 +262,7 @@ class LCQuADLanguage(DomainLanguage):
         return Count(intermediate_results)
 
     @predicate
-    def contains(self, superset: ResultSet, subset: ResultSet) -> Contains:
+    def contains(self, superset: ResultSet, subset: Entity) -> Contains:
         """
         Returns a boolean value indicating whether subset is "contained" inside superset
         """
@@ -282,7 +270,7 @@ class LCQuADLanguage(DomainLanguage):
 
 
 if __name__ == '__main__':
-    hdt = HDTDocument('/data/nilesh/datasets/dbpedia/hdt/dbpedia2016-04en.hdt', map=True, progress=True)
+    hdt = HDTDocument('/home/IAIS/nchakrabor/datasets/hdt/dbpedia2016-04en.hdt', map=True, progress=True)
     executor = HdtExecutor(graph=hdt)
     # l = LCQuADLanguage(ctx)
     # ers = l.execute('(find (get http://dbpedia.org/resource/Barack_Obama), (reverse http://dbpedia.org/ontology/religion))')

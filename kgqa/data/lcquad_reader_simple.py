@@ -12,9 +12,10 @@ from allennlp.data.tokenizers.word_splitter import SpacyWordSplitter
 from allennlp.semparse import ParsingError
 from overrides import overrides
 from pathlib import Path
-
+from allennlp.common.util import START_SYMBOL, END_SYMBOL
 
 from kgqa.semparse.context.lcquad_context import LCQuADContext
+from kgqa.semparse.executor import StubExecutor
 from kgqa.semparse.executor.executor import Executor
 from kgqa.semparse.language import LCQuADLanguage
 
@@ -23,74 +24,64 @@ magic_replace = [(",", "MAGIC_COMMA"),
                  (")", "MAGIC_RIGHT_PARENTHESIS")]
 
 def deurify_predicate(uri: str):
-    return uri
-    # return uri.split("/")[-1]
+    #return uri
+    last = uri.split("/")[-1]
+    # return '-' + last if uri.startswith('-') else last
+    return last[1:] if last.startswith('-') else last
 
 
-class LCQuADReader(DatasetReader):
-    def __init__(self, executor: Executor,
-                 tokenizer: Callable[[str], List[str]] = None,
+class LCQuADReaderSimple(DatasetReader):
+    def __init__(self, tokenizer: Callable[[str], List[str]] = None,
                  token_indexers: Dict[str, TokenIndexer] = None,
+                 target_token_indexers: Dict[str, TokenIndexer] = None,
                  predicates: List[str] = None,
-                 ontology_types: List[str] = None) -> None:
+                 ontology_types: List[str] = None):
         super().__init__(lazy=False)
 
-        def splitter(x: str):
-            return [w.text for w in
-                    SpacyWordSplitter(language='en_core_web_sm',
-                                      pos_tags=False).split_words(x)]
         self.tokenizer = tokenizer or WordTokenizer()
         self.token_indexers = token_indexers or {"tokens": SingleIdTokenIndexer()}
+        self.target_token_indexers = target_token_indexers or {"tokens": SingleIdTokenIndexer(namespace='target_tokens')}
 
         self.predicates = [deurify_predicate(p) for p in predicates]
         self.original_predicates = predicates
         self.unique_predicates = list(set(self.predicates))
         self.ontology_types = ontology_types
-        self.executor = executor
+        self.executor = StubExecutor()
+        context = LCQuADContext(self.executor, [], ['ENT_1', 'ENT_2'], self.unique_predicates)
+        self.language = LCQuADLanguage(context)
 
     @overrides
-    def text_to_instance(self, question_tokens: List[Token],
-                         logical_form: str,
-                         question_entities: List[str],
-                         question_predicates: List[str]) -> Optional[Instance]:
+    def text_to_instance(self, question_entities: List[str],
+                         question_tokens: List[Token],
+                         logical_form: str) -> Optional[Instance]:
         try:
             if any([True for i in self.ontology_types if i in logical_form]):
                 return None
 
-            if "intersection" in logical_form or "contains" in logical_form or "count" in logical_form:
-                return None
-
-            for old, new in zip(self.original_predicates, self.predicates):
-                logical_form = logical_form.replace(old, new)
-
-            question_entities = question_entities #+ list(self.ontology_types)
-
-            import random
-            random.shuffle(question_predicates)
-            context = LCQuADContext(self.executor, question_tokens, question_entities, question_predicates)
-            language = LCQuADLanguage(context)
-            # print("CONSTANT:" + str(language._functions['http://dbpedia.org/ontology/creator']))
-            target_action_sequence = language.logical_form_to_action_sequence(logical_form)
-            #labelled_results = language.execute_action_sequence(target_action_sequence)
-            # if isinstance(labelled_results, set) and len(labelled_results) > 1000:
+            # if "intersection" in logical_form or "contains" in logical_form or "count" in logical_form:
             #     return None
 
-            production_rule_fields = [ProductionRuleField(rule, is_global_rule=True) for rule
-                                      in language.all_possible_productions()]
-            action_field = ListField(production_rule_fields)
-            action_map = {action.rule: i for i, action in enumerate(production_rule_fields)}
-            target_action_sequence_field = ListField([ListField([IndexField(action_map[a], action_field)
-                                                      for a in target_action_sequence])])
+            for old, new in zip(self.original_predicates, self.predicates):
+                logical_form = logical_form.replace('-' + old, new)
+                logical_form = logical_form.replace(old, new)
+
+            if "/" in logical_form:
+                return None
+            # for lang_tokens in ['findSet', 'find', 'intersection']:
+            #     logical_form = logical_form.replace(lang_tokens, ' ')
+
+            # logical_form_tokens = self.tokenizer.tokenize(logical_form)
+            logical_form_tokens = [Token(i) for i in self.language.logical_form_to_action_sequence(logical_form)]
+
+            question_tokens.insert(0, Token(START_SYMBOL))
+            question_tokens.append(Token(END_SYMBOL))
+
+            logical_form_tokens.insert(0, Token(START_SYMBOL))
+            logical_form_tokens.append(Token(END_SYMBOL))
 
             fields = {
-                'question': TextField(question_tokens, self.token_indexers),
-                'question_entities': MetadataField(question_entities),
-                'question_predicates': MetadataField(question_predicates),
-                'world': MetadataField(language),
-                'actions': action_field,
-                'target_action_sequences': target_action_sequence_field,
-                'logical_forms': MetadataField([logical_form])
-                #'labelled_results': MetadataField(labelled_results),
+                'source_tokens': TextField(question_tokens, self.token_indexers),
+                'target_tokens': TextField(logical_form_tokens, self.target_token_indexers),
             }
 
             return Instance(fields)
@@ -98,65 +89,56 @@ class LCQuADReader(DatasetReader):
             print(logical_form)
             return None
 
-    def _write_custom_cache(self, file_path: str, instances: List[Instance]):
-        def remove_executor(instance: Instance):
-            language: LCQuADLanguage = instance.fields['world'].metadata
-            language.context.executor = None
-            language.executor = None
-            return instance
-
-        cache_file = file_path + ".cache"
-        if not Path(cache_file).exists():
-            instances = [remove_executor(i) for i in instances]
-            with open(cache_file, "wb") as fp:
-                pickle.dump(instances, fp)
-
-    def _read_custom_cache(self, file_path: str) -> List[Instance]:
-        def add_executor(instance: Instance):
-            language: LCQuADLanguage = instance.fields['world'].metadata
-            language.context.executor = self.executor
-            language.executor = self.executor
-            return instance
-
-        cache_file = file_path + ".cache"
-        with open(cache_file, 'rb') as fp:
-            cached = pickle.load(fp)
-        for i in cached:
-            yield add_executor(i)
+    # def _write_custom_cache(self, file_path: str, instances: List[Instance]):
+    #     cache_file = file_path + ".cache"
+    #     if not Path(cache_file).exists():
+    #         with open(cache_file, "wb") as fp:
+    #             pickle.dump(instances, fp)
+    #
+    # def _read_custom_cache(self, file_path: str) -> List[Instance]:
+    #     cache_file = file_path + ".cache"
+    #     with open(cache_file, 'rb') as fp:
+    #         cached = pickle.load(fp)
+    #     return cached
 
     @overrides
     def _read(self, file_path: str) -> Iterable[Instance]:
-        try:
-            for i in self._read_custom_cache(file_path):
-                yield i
-        except FileNotFoundError as e:
-            instances = []
-            bad_count = 0
-            good_count = 0
+        whitelist = set(['http://dbpedia.org/ontology/award',
+                     'http://dbpedia.org/ontology/religion',
+                     'http://dbpedia.org/property/awards',
+                     'http://dbpedia.org/ontology/birthPlace',
+                     'http://dbpedia.org/ontology/sport',
+                     'http://dbpedia.org/ontology/team',
+                     'http://dbpedia.org/ontology/manufacturer',
+                     'http://dbpedia.org/ontology/deathPlace',
+                     'http://dbpedia.org/ontology/almaMater'])
 
-            with codecs.open(file_path) as fp:
-                dataset = json.load(fp)
+        def whitelisted(preds):
+            return set(preds).issubset(whitelist)
 
-            print(len(self.unique_predicates))
+        bad_count = 0
+        good_count = 0
 
-            for doc in dataset:
-                if doc['entities']:
-                    instance = self.text_to_instance(
-                        [Token(x) for x in self.tokenizer.tokenize(doc["question_mapped"])],
-                        doc["logical_form"],
-                        [entity['uri'] for entity in doc['entities']],
-                        doc.get('predicates', self.unique_predicates)
-                    )
-                    if instance:
-                        good_count += 1
-                        instances.append(instance)
-                        yield instance
-                    else:
-                        bad_count += 1
+        with codecs.open(file_path) as fp:
+            dataset = json.load(fp)
+
+        for doc in dataset:
+            if doc['entities']: #  and whitelisted(doc['predicates']):
+                logical_form = doc["logical_form"]
+                for ent in doc['entities']:
+                    logical_form = logical_form.replace(ent['uri'], ent['placeholder'])
+                instance = self.text_to_instance(
+                    [ent['placeholder'] for ent in doc['entities']],
+                    self.tokenizer.tokenize(doc["question_mapped"]),
+                    logical_form
+                )
+                if instance:
+                    good_count += 1
+                    yield instance
                 else:
                     bad_count += 1
+            else:
+                bad_count += 1
 
-            self._write_custom_cache(file_path, instances)
-
-            print("BAD count:", bad_count)
-            print("GOOD count:", good_count)
+        print("BAD count:", bad_count)
+        print("GOOD count:", good_count)

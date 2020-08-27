@@ -7,7 +7,7 @@ from allennlp.data import Instance, Field
 from allennlp.data.dataset_readers import DatasetReader
 from allennlp.data.fields import TextField, MetadataField, ListField, IndexField, ProductionRuleField
 from allennlp.data.token_indexers import TokenIndexer, SingleIdTokenIndexer
-from allennlp.data.tokenizers import Token
+from allennlp.data.tokenizers import Token, WordTokenizer
 from allennlp.data.tokenizers.word_splitter import SpacyWordSplitter
 from allennlp.semparse import ParsingError
 from overrides import overrides
@@ -22,24 +22,30 @@ magic_replace = [(",", "MAGIC_COMMA"),
                  ("(", "MAGIC_LEFT_PARENTHESIS"),
                  (")", "MAGIC_RIGHT_PARENTHESIS")]
 
-
+def deurify_predicate(uri: str):
+    return uri
+    # return uri.split("/")[-1]
 
 
 class LCQuADReader(DatasetReader):
     def __init__(self, executor: Executor,
                  tokenizer: Callable[[str], List[str]] = None,
                  token_indexers: Dict[str, TokenIndexer] = None,
-                 predicates: List[str] = None) -> None:
+                 predicates: List[str] = None,
+                 ontology_types: List[str] = None) -> None:
         super().__init__(lazy=False)
 
         def splitter(x: str):
             return [w.text for w in
                     SpacyWordSplitter(language='en_core_web_sm',
                                       pos_tags=False).split_words(x)]
-        self.tokenizer = tokenizer or splitter
+        self.tokenizer = tokenizer or WordTokenizer()
         self.token_indexers = token_indexers or {"tokens": SingleIdTokenIndexer()}
 
-        self.predicates = predicates
+        self.predicates = [deurify_predicate(p) for p in predicates]
+        self.original_predicates = predicates
+        self.unique_predicates = list(set(self.predicates))
+        self.ontology_types = ontology_types
         self.executor = executor
 
     @overrides
@@ -48,13 +54,26 @@ class LCQuADReader(DatasetReader):
                          question_entities: List[str],
                          question_predicates: List[str]) -> Optional[Instance]:
         try:
+            if any([True for i in self.ontology_types if i in logical_form]):
+                return None
+
+            if "intersection" in logical_form or "contains" in logical_form or "count" in logical_form:
+                return None
+
+            for old, new in zip(self.original_predicates, self.predicates):
+                logical_form = logical_form.replace(old, new)
+
+            question_entities = question_entities #+ list(self.ontology_types)
+
+            import random
+            random.shuffle(question_predicates)
             context = LCQuADContext(self.executor, question_tokens, question_entities, question_predicates)
             language = LCQuADLanguage(context)
             # print("CONSTANT:" + str(language._functions['http://dbpedia.org/ontology/creator']))
             target_action_sequence = language.logical_form_to_action_sequence(logical_form)
-            labelled_results = language.execute_action_sequence(target_action_sequence)
-            if isinstance(labelled_results, set) and len(labelled_results) > 1000:
-                return None
+            #labelled_results = language.execute_action_sequence(target_action_sequence)
+            # if isinstance(labelled_results, set) and len(labelled_results) > 1000:
+            #     return None
 
             production_rule_fields = [ProductionRuleField(rule, is_global_rule=True) for rule
                                       in language.all_possible_productions()]
@@ -70,12 +89,13 @@ class LCQuADReader(DatasetReader):
                 'world': MetadataField(language),
                 'actions': action_field,
                 'target_action_sequences': target_action_sequence_field,
-                'logical_forms': MetadataField([logical_form]),
-                'labelled_results': MetadataField(labelled_results),
+                'logical_forms': MetadataField([logical_form])
+                #'labelled_results': MetadataField(labelled_results),
             }
 
             return Instance(fields)
         except ParsingError:
+            print(logical_form)
             return None
 
     def _write_custom_cache(self, file_path: str, instances: List[Instance]):
@@ -117,13 +137,15 @@ class LCQuADReader(DatasetReader):
             with codecs.open(file_path) as fp:
                 dataset = json.load(fp)
 
+            print(len(self.unique_predicates))
+
             for doc in dataset:
                 if doc['entities']:
                     instance = self.text_to_instance(
-                        [Token(x) for x in self.tokenizer(doc["question"])],
+                        self.tokenizer.tokenize(doc["question_mapped"]),
                         doc["logical_form"],
                         [entity['uri'] for entity in doc['entities']],
-                        doc.get('predicate_candidates', self.predicates)
+                        doc.get('predicates', self.unique_predicates)
                     )
                     if instance:
                         good_count += 1

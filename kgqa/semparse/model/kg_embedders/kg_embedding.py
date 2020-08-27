@@ -13,7 +13,7 @@ from allennlp.common.file_utils import cached_path
 from allennlp.nn import util
 from allennlp.modules.time_distributed import TimeDistributed
 
-from dialogue_models.modules.kg_embedders.kg_embedder import KgEmbedder
+from kgqa.semparse.model.kg_embedders.kg_embedder import KgEmbedder
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
